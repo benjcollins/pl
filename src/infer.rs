@@ -1,7 +1,7 @@
-use crate::{ast::{Fun, Stmt, Expr, BinaryOp, self}, symbol::{SymbolTable, SymbolMap}};
+use crate::{ast::{Fun, Stmt, Expr, BinaryOp, self}, symbol::{SymbolTable, SymbolMap}, ty::{AtomicTy, Int, Signedness, Size, Ty}};
 
 pub struct Context<'sym, 'src> {
-    tys: Vec<Ty>,
+    tys: Vec<InferTy>,
     symbol_tys: SymbolMap<TyName>,
     symbols: &'sym SymbolTable,
     src: &'src str,
@@ -11,42 +11,11 @@ pub struct Context<'sym, 'src> {
 struct TyName(usize);
 
 #[derive(Debug, Clone, Copy)]
-enum Ty {
+enum InferTy {
     Any,
     Equal(TyName),
     AnyInt,
     Atomic(AtomicTy),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Int {
-    pub signedness: Signedness,
-    pub size: Size,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Size {
-    B8,
-    B16,
-    B32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Signedness {
-    Signed,
-    Unsigned,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AtomicTy {
-    Int(Int),
-    None,
-    Bool,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ConcreteTy {
-    Atomic(AtomicTy)
 }
 
 impl Default for TyName {
@@ -56,14 +25,14 @@ impl Default for TyName {
 }
 
 impl<'sym, 'src> Context<'sym, 'src> {
-    pub fn infer(fun: &Fun, symbols: &'sym SymbolTable, src: &'src str) -> (SymbolMap<ConcreteTy>, ConcreteTy) {
+    pub fn infer(fun: &Fun, symbols: &'sym SymbolTable, src: &'src str) -> (SymbolMap<Ty>, Ty) {
         let mut ctx = Context {
             symbols,
             symbol_tys: symbols.create_symbol_map(),
-            tys: vec![Ty::Any],
+            tys: vec![InferTy::Any],
             src,
         };
-        let return_ty = fun.returns.as_ref().map_or(Ty::Atomic(AtomicTy::None), |ty| ctx.ast_to_ty(ty));
+        let return_ty = fun.returns.as_ref().map_or(InferTy::Atomic(AtomicTy::None), |ty| ctx.ast_to_ty(ty));
         let return_ty_name = ctx.new_ty_name(return_ty);
         for stmt in &fun.block.stmts {
             ctx.infer_stmt(stmt, return_ty_name);
@@ -71,12 +40,12 @@ impl<'sym, 'src> Context<'sym, 'src> {
         let symbol_tys = ctx.symbol_tys.map(|_, name| ctx.to_concrete(*name));
         (symbol_tys, ctx.to_concrete(return_ty_name))
     }
-    fn to_concrete(&self, name: TyName) -> ConcreteTy {
+    fn to_concrete(&self, name: TyName) -> Ty {
         match *self.get_ty(name) {
-            Ty::Atomic(ty) => ConcreteTy::Atomic(ty),
-            Ty::Equal(name) => self.to_concrete(name),
-            Ty::AnyInt => ConcreteTy::Atomic(AtomicTy::Int(Int { size: Size::B32, signedness: Signedness::Unsigned })),
-            Ty::Any => panic!(),
+            InferTy::Atomic(ty) => Ty::Atomic(ty),
+            InferTy::Equal(name) => self.to_concrete(name),
+            InferTy::AnyInt => Ty::Atomic(AtomicTy::Int(Int { size: Size::B32, signedness: Signedness::Unsigned })),
+            InferTy::Any => panic!(),
         }
     }
     fn infer_stmt(&mut self, stmt: &Stmt, return_ty: TyName) {
@@ -88,7 +57,7 @@ impl<'sym, 'src> Context<'sym, 'src> {
                     self.new_ty_name(ty)
                 });
                 let ty = match (expr_ty, ast_ty) {
-                    (None, None) => self.new_ty_name(Ty::Any),
+                    (None, None) => self.new_ty_name(InferTy::Any),
                     (None, Some(ast_ty)) => ast_ty,
                     (Some(expr_ty), None) => expr_ty,
                     (Some(expr_ty), Some(ast_ty)) => {
@@ -111,14 +80,14 @@ impl<'sym, 'src> Context<'sym, 'src> {
     }
     fn ty_of_expr(&mut self, expr: &Expr) -> TyName {
         match expr {
-            Expr::Bool(_) => self.new_ty_name(Ty::Atomic(AtomicTy::Bool)),
-            Expr::Integer { .. } => self.new_ty_name(Ty::AnyInt),
+            Expr::Bool(_) => self.new_ty_name(InferTy::Atomic(AtomicTy::Bool)),
+            Expr::Integer { .. } => self.new_ty_name(InferTy::AnyInt),
             Expr::Ident(ident) => *self.symbol_tys.get(self.symbols.ident_to_symbol(*ident)),
             Expr::Binary { left, right, op } => match op {
                 BinaryOp::Add | BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Divide => {
                     let left_ty = self.ty_of_expr(&left);
                     let right_ty = self.ty_of_expr(&right);
-                    let any_int_ty = self.new_ty_name(Ty::AnyInt);
+                    let any_int_ty = self.new_ty_name(InferTy::AnyInt);
                     self.unify(left_ty, any_int_ty);
                     self.unify(right_ty, any_int_ty);
                     any_int_ty
@@ -126,49 +95,49 @@ impl<'sym, 'src> Context<'sym, 'src> {
             }
         }
     }
-    fn ast_to_ty(&mut self, ty: &ast::Ty) -> Ty {
+    fn ast_to_ty(&mut self, ty: &ast::Ty) -> InferTy {
         match ty.name.as_str(self.src) {
-            "u8" => Ty::Atomic(AtomicTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B8 })),
-            "u16" => Ty::Atomic(AtomicTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B16 })),
-            "u32" => Ty::Atomic(AtomicTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B32 })),
+            "u8" => InferTy::Atomic(AtomicTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B8 })),
+            "u16" => InferTy::Atomic(AtomicTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B16 })),
+            "u32" => InferTy::Atomic(AtomicTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B32 })),
             
-            "i8" => Ty::Atomic(AtomicTy::Int(Int { signedness: Signedness::Signed, size: Size::B8 })),
-            "i16" => Ty::Atomic(AtomicTy::Int(Int { signedness: Signedness::Signed, size: Size::B16 })),
-            "i32" => Ty::Atomic(AtomicTy::Int(Int { signedness: Signedness::Signed, size: Size::B32 })),
+            "i8" => InferTy::Atomic(AtomicTy::Int(Int { signedness: Signedness::Signed, size: Size::B8 })),
+            "i16" => InferTy::Atomic(AtomicTy::Int(Int { signedness: Signedness::Signed, size: Size::B16 })),
+            "i32" => InferTy::Atomic(AtomicTy::Int(Int { signedness: Signedness::Signed, size: Size::B32 })),
 
-            "bool" => Ty::Atomic(AtomicTy::Bool),
+            "bool" => InferTy::Atomic(AtomicTy::Bool),
 
             _ => panic!(),
         }
     }
-    fn new_ty_name(&mut self, ty: Ty) -> TyName {
+    fn new_ty_name(&mut self, ty: InferTy) -> TyName {
         let name = TyName(self.tys.len());
         self.tys.push(ty);
         name
     }
-    fn get_ty(&self, name: TyName) -> &Ty {
+    fn get_ty(&self, name: TyName) -> &InferTy {
         &self.tys[name.0]
     }
-    fn get_ty_mut(&mut self, name: TyName) -> &mut Ty {
+    fn get_ty_mut(&mut self, name: TyName) -> &mut InferTy {
         &mut self.tys[name.0]
     }
     fn unify(&mut self, a: TyName, b: TyName) {
         if a == b { return }
         match (*self.get_ty(a), *self.get_ty(b)) {
-            (Ty::Equal(a), _) => self.unify(a, b),
-            (_, Ty::Equal(b)) => self.unify(a, b),
+            (InferTy::Equal(a), _) => self.unify(a, b),
+            (_, InferTy::Equal(b)) => self.unify(a, b),
 
-            (Ty::Any, _) => *self.get_ty_mut(a) = Ty::Equal(b),
-            (_, Ty::Any) => *self.get_ty_mut(b) = Ty::Equal(a),
+            (InferTy::Any, _) => *self.get_ty_mut(a) = InferTy::Equal(b),
+            (_, InferTy::Any) => *self.get_ty_mut(b) = InferTy::Equal(a),
 
-            (Ty::AnyInt, Ty::AnyInt) => *self.get_ty_mut(a) = Ty::Equal(b),
+            (InferTy::AnyInt, InferTy::AnyInt) => *self.get_ty_mut(a) = InferTy::Equal(b),
 
-            (Ty::AnyInt, Ty::Atomic(AtomicTy::Int(int))) | (Ty::Atomic(AtomicTy::Int(int)), Ty::AnyInt) => {
-                *self.get_ty_mut(a) = Ty::Atomic(AtomicTy::Int(int));
-                *self.get_ty_mut(b) = Ty::Atomic(AtomicTy::Int(int));
+            (InferTy::AnyInt, InferTy::Atomic(AtomicTy::Int(int))) | (InferTy::Atomic(AtomicTy::Int(int)), InferTy::AnyInt) => {
+                *self.get_ty_mut(a) = InferTy::Atomic(AtomicTy::Int(int));
+                *self.get_ty_mut(b) = InferTy::Atomic(AtomicTy::Int(int));
             }
-            (Ty::AnyInt, Ty::Atomic(_)) | (Ty::Atomic(_), Ty::AnyInt) => { panic!() }
-            (Ty::Atomic(a), Ty::Atomic(b)) => if a != b { panic!() }
+            (InferTy::AnyInt, InferTy::Atomic(_)) | (InferTy::Atomic(_), InferTy::AnyInt) => { panic!() }
+            (InferTy::Atomic(a), InferTy::Atomic(b)) => if a != b { panic!() }
         }
     }
 }

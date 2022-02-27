@@ -11,6 +11,7 @@ mod lexer;
 mod ast;
 mod parser;
 mod symbol;
+mod ty;
 mod infer;
 mod mir;
 mod mips;

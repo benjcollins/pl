@@ -1,4 +1,4 @@
-use crate::{infer::{Int, ConcreteTy, AtomicTy}, symbol::{Symbol, SymbolMap, SymbolTable}, ast, token::{Token, TokenKind}};
+use crate::{ty::{Int, Ty, AtomicTy}, symbol::{Symbol, SymbolMap, SymbolTable}, ast, token::{Token, TokenKind}};
 
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -7,14 +7,14 @@ pub struct Block {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Alloc(ConcreteTy),
+    Alloc(Ty),
     Drop,
     Return {
-        ty: ConcreteTy,
+        ty: Ty,
         expr: Expr,
     },
     Assign {
-        ty: ConcreteTy,
+        ty: Ty,
         stack_slot: usize,
         expr: Expr,
     }
@@ -29,7 +29,7 @@ pub enum Expr {
     Bool(bool),
     Load {
         stack_slot: usize,
-        ty: ConcreteTy,
+        ty: Ty,
     },
     Arithmetic {
         left: Box<Expr>,
@@ -49,15 +49,15 @@ pub enum ArithmeticOp {
 
 pub struct Compiler<'a> {
     symbols: &'a SymbolTable,
-    symbol_tys: &'a SymbolMap<ConcreteTy>,
-    return_ty: &'a ConcreteTy,
+    symbol_tys: &'a SymbolMap<Ty>,
+    return_ty: &'a Ty,
     src: &'a str,
-    stack_slots: Vec<ConcreteTy>,
+    stack_slots: Vec<Ty>,
     symbol_locations: SymbolMap<usize>,
 }
 
 impl<'a> Compiler<'a> {
-    pub fn compile_fun(src: &str, symbols: &SymbolTable, symbol_tys: &SymbolMap<ConcreteTy>, return_ty: &ConcreteTy, fun: &ast::Fun) -> Block {
+    pub fn compile_fun(src: &str, symbols: &SymbolTable, symbol_tys: &SymbolMap<Ty>, return_ty: &Ty, fun: &ast::Fun) -> Block {
         let mut compiler = Compiler {
             src,
             symbols,
@@ -108,13 +108,13 @@ impl<'a> Compiler<'a> {
         let stack_slot = *self.symbol_locations.get(symbol);
         block.stmts.push(Stmt::Assign { stack_slot, expr, ty: ty.clone() })
     }
-    fn compile_expr(&self, expr: &ast::Expr, ty: &ConcreteTy) -> Expr {
+    fn compile_expr(&self, expr: &ast::Expr, ty: &Ty) -> Expr {
         match expr {
             ast::Expr::Integer { offset } => {
                 let token = Token::new(*offset, TokenKind::Integer);
                 let value: u32 = token.as_str(self.src).parse().unwrap();
                 let int = match ty {
-                    ConcreteTy::Atomic(AtomicTy::Int(int)) => int,
+                    Ty::Atomic(AtomicTy::Int(int)) => int,
                     _ => panic!(),
                 };
                 Expr::Int { value, ty: *int }
@@ -131,7 +131,7 @@ impl<'a> Compiler<'a> {
             }
             ast::Expr::Binary { left, right, op } => {
                 let int = *match ty {
-                    ConcreteTy::Atomic(AtomicTy::Int(int)) => int,
+                    Ty::Atomic(AtomicTy::Int(int)) => int,
                     _ => panic!(),
                 };
                 let left = Box::new(self.compile_expr(left, ty));

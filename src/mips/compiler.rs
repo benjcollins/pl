@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{mir::{Block, Stmt, Expr, ArithmeticOp}, infer::{ConcreteTy, Size, Int, Signedness, AtomicTy}, mips::{inst::{Inst, OpcodeI, Funct}, regs::Reg}};
+use crate::{mir::{Block, Stmt, Expr, ArithmeticOp}, ty::{Ty, Size, Int, Signedness, AtomicTy}, mips::{inst::{Inst, OpcodeI, Funct}, regs::Reg}};
 
 use super::regs::{TempReg, TEMP_REGS, ValReg};
 
@@ -20,9 +20,9 @@ pub enum Value {
     None,
 }
 
-fn ty_len_bytes(ty: &ConcreteTy) -> u16 {
+fn ty_len_bytes(ty: &Ty) -> u16 {
     match ty {
-        ConcreteTy::Atomic(ty) => match ty {
+        Ty::Atomic(ty) => match ty {
             AtomicTy::Int(int) => match int.size {
                 Size::B8 => 1,
                 Size::B16 => 2,
@@ -34,9 +34,9 @@ fn ty_len_bytes(ty: &ConcreteTy) -> u16 {
     }
 }
 
-fn ty_align_bytes(ty: &ConcreteTy) -> u16 {
+fn ty_align_bytes(ty: &Ty) -> u16 {
     match ty {
-        ConcreteTy::Atomic(ty) => match ty {
+        Ty::Atomic(ty) => match ty {
             AtomicTy::Int(int) => match int.size {
                 Size::B8 => 1,
                 Size::B16 => 2,
@@ -126,7 +126,6 @@ impl Compiler {
                         shamt: 0,
                     })
                 }
-                _ => {}
             }
         }
     }
@@ -158,7 +157,7 @@ impl Compiler {
             }
             Expr::Load { stack_slot, ty } => {
                 match ty {
-                    ConcreteTy::Atomic(AtomicTy::Bool) => {
+                    Ty::Atomic(AtomicTy::Bool) => {
                         let reg = self.alloc_temp_reg();
                         self.append_inst(Inst::I {
                             op: OpcodeI::LB,
@@ -168,7 +167,7 @@ impl Compiler {
                         });
                         Value::Bool(reg)
                     }
-                    ConcreteTy::Atomic(AtomicTy::Int(ty)) => {
+                    Ty::Atomic(AtomicTy::Int(ty)) => {
                         let reg = self.alloc_temp_reg();
                         let op = match (ty.signedness, ty.size) {
                             (Signedness::Signed, Size::B8) => OpcodeI::LB,
@@ -186,7 +185,7 @@ impl Compiler {
                         });
                         Value::Int { reg, ty: *ty }
                     }
-                    ConcreteTy::Atomic(AtomicTy::None) => Value::None,
+                    Ty::Atomic(AtomicTy::None) => Value::None,
                 }
             }
             Expr::Arithmetic { left, right, ty, op } => {
