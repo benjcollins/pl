@@ -32,6 +32,14 @@ impl<'src> Parser<'src> {
                 self.next();
                 Expr::Integer { offset: token.offset }
             }
+            TokenKind::True => {
+                self.next();
+                Expr::Bool(true)
+            }
+            TokenKind::False => {
+                self.next();
+                Expr::Bool(false)
+            }
             TokenKind::OpenBrace => {
                 self.next();
                 let expr = self.parse_expr(Prec::Bracket);

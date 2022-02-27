@@ -28,6 +28,8 @@ impl<'src> Lexer<'src> {
                         "let" => self.token_here(TokenKind::Let),
                         "fn" => self.token_here(TokenKind::Fn),
                         "return" => self.token_here(TokenKind::Return),
+                        "true" => self.token_here(TokenKind::True),
+                        "false" => self.token_here(TokenKind::False),
                         _ => ident_token,
                     };
                 }

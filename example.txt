@@ -1,5 +1,4 @@
-fn test() u32 {
-    let x: u8 = 5
-    let y: u32 = 9
-    return y
+fn test() bool {
+    let x: bool = true
+    return x
 }

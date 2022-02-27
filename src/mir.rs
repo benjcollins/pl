@@ -1,4 +1,4 @@
-use crate::{infer::{Int, ConcreteTy}, symbol::{Symbol, SymbolMap, SymbolTable}, ast, token::{Token, TokenKind}};
+use crate::{infer::{Int, ConcreteTy, AtomicTy}, symbol::{Symbol, SymbolMap, SymbolTable}, ast, token::{Token, TokenKind}};
 
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -26,6 +26,7 @@ pub enum Expr {
         value: u32,
         ty: Int,
     },
+    Bool(bool),
     Load {
         stack_slot: usize,
         ty: ConcreteTy,
@@ -113,10 +114,13 @@ impl<'a> Compiler<'a> {
                 let token = Token::new(*offset, TokenKind::Integer);
                 let value: u32 = token.as_str(self.src).parse().unwrap();
                 let int = match ty {
-                    ConcreteTy::Int(int) => int,
+                    ConcreteTy::Atomic(AtomicTy::Int(int)) => int,
                     _ => panic!(),
                 };
                 Expr::Int { value, ty: *int }
+            }
+            ast::Expr::Bool(value) => {
+                Expr::Bool(*value)
             }
             ast::Expr::Ident(ident) => {
                 let symbol = self.symbols.ident_to_symbol(*ident);
@@ -127,7 +131,7 @@ impl<'a> Compiler<'a> {
             }
             ast::Expr::Binary { left, right, op } => {
                 let int = *match ty {
-                    ConcreteTy::Int(int) => int,
+                    ConcreteTy::Atomic(AtomicTy::Int(int)) => int,
                     _ => panic!(),
                 };
                 let left = Box::new(self.compile_expr(left, ty));

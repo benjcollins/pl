@@ -16,6 +16,7 @@ pub enum Expr {
     Integer {
         offset: usize,
     },
+    Bool(bool),
     Ident(Ident),
     Binary {
         left: Box<Expr>,

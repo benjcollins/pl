@@ -21,6 +21,8 @@ pub enum TokenKind {
     Let,
     Fn,
     Return,
+    True,
+    False,
 
     OpenBrace,
     CloseBrace,
@@ -65,6 +67,8 @@ impl Token {
             TokenKind::Equals => "=".len(),
             TokenKind::Let => "let".len(),
             TokenKind::Fn => "fn".len(),
+            TokenKind::True => "false".len(),
+            TokenKind::False => "true".len(),
             TokenKind::Return => "return".len(),
             TokenKind::End => 0,
         }
