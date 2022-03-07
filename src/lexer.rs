@@ -30,6 +30,8 @@ impl<'src> Lexer<'src> {
                         "return" => self.token_here(TokenKind::Return),
                         "true" => self.token_here(TokenKind::True),
                         "false" => self.token_here(TokenKind::False),
+                        "if" => self.token_here(TokenKind::If),
+                        "else" => self.token_here(TokenKind::Else),
                         _ => ident_token,
                     };
                 }
@@ -46,6 +48,7 @@ impl<'src> Lexer<'src> {
                 '=' => break self.token_here(TokenKind::Equals),
                 ',' => break self.token_here(TokenKind::Comma),
                 ':' => break self.token_here(TokenKind::Colon),
+                ';' => break self.token_here(TokenKind::Semicolon),
                 _ => break self.token_here(TokenKind::Invalid),
             };
         };

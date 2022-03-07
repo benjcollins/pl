@@ -1,13 +1,12 @@
 .text
 
 main:
-li $sp, 0x7fffeffc
-li $fp, 0x7fffeffc
-jal test
-move $a0, $v0
-li $v0, 1
-syscall
-li $v0, 10
-syscall
+  li $sp, 0x7fffeffc
+  li $fp, 0x7fffeffc
+  jal l0
+  move $a0, $v0
+  li $v0, 1
+  syscall
+  li $v0, 10
+  syscall
 
-test:

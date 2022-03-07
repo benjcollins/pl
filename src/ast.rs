@@ -12,6 +12,20 @@ impl Ident {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct If {
+    pub cond: Box<Expr>,
+    pub if_block: Block,
+    pub else_block: Else,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Else {
+    Block(Block),
+    If(Box<If>),
+    None,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Integer {
         offset: usize,
@@ -23,6 +37,7 @@ pub enum Expr {
         right: Box<Expr>,
         op: BinaryOp,
     },
+    // If(If),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -38,6 +53,7 @@ pub enum Stmt {
     Let { ident: Ident, expr: Option<Expr>, ty: Option<Ty> },
     Assign { ident: Ident, expr: Expr },
     Return { expr: Expr },
+    If(If),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,6 +64,7 @@ pub struct Ty {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
+    pub result: Option<Box<Expr>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

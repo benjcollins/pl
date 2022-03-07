@@ -1,4 +1,4 @@
-use crate::{lexer::Lexer, token::{TokenKind, Token}, ast::{Expr, BinaryOp, Ident, Stmt, Fun, Ty, Block}};
+use crate::{lexer::Lexer, token::{TokenKind, Token}, ast::{Expr, BinaryOp, Ident, Stmt, Fun, Ty, Block, Else, If}};
 
 pub struct Parser<'src> {
     lexer: Lexer<'src>,
@@ -47,7 +47,7 @@ impl<'src> Parser<'src> {
                 self.next();
                 expr
             }
-            _ => panic!(),
+            _ => panic!("{:?}", self.token.kind),
         };
         loop {
             left = match self.token.kind {
@@ -69,8 +69,27 @@ impl<'src> Parser<'src> {
             op,
         }
     }
-    pub fn parse_stmt(&mut self) -> Stmt {
+    fn parse_if(&mut self) -> If {
+        let cond = Box::new(self.parse_expr(Prec::Bracket));
+        let if_block = self.parse_block();
+        let else_block = if self.token.kind == TokenKind::Else {
+            self.next();
+            if self.token.kind == TokenKind::If {
+                Else::If(Box::new(self.parse_if()))
+            } else {
+                Else::Block(self.parse_block())
+            }
+        } else {
+            Else::None
+        };
+        If { cond, if_block, else_block }
+    }
+    pub fn parse_stmt(&mut self) -> Option<Stmt> {
         match self.token.kind {
+            TokenKind::If => {
+                self.next();
+                Some(Stmt::If(self.parse_if()))
+            }
             TokenKind::Let => {
                 self.next();
                 if self.token.kind != TokenKind::Ident { panic!() }
@@ -88,12 +107,15 @@ impl<'src> Parser<'src> {
                 } else {
                     None
                 };
-                Stmt::Let { ident, expr, ty }
+                if self.token.kind != TokenKind::Semicolon { panic!() }
+                self.next();
+                Some(Stmt::Let { ident, expr, ty })
             }
             TokenKind::Return => {
                 self.next();
                 let expr = self.parse_expr(Prec::Bracket);
-                Stmt::Return { expr }
+                if self.token.kind != TokenKind::CloseCurlyBrace { panic!() }
+                Some(Stmt::Return { expr })
             }
             TokenKind::Ident => {
                 let ident = Ident { offset: self.token.offset };
@@ -101,9 +123,11 @@ impl<'src> Parser<'src> {
                 if self.token.kind != TokenKind::Equals { panic!() }
                 self.next();
                 let expr = self.parse_expr(Prec::Bracket);
-                Stmt::Assign { ident, expr }
+                if self.token.kind != TokenKind::Semicolon { panic!() }
+                self.next();
+                Some(Stmt::Assign { ident, expr })
             }
-            _ => panic!("{:?}", self.token),
+            _ => None,
         }
     }
     pub fn parse_ty(&mut self) -> Ty {
@@ -115,13 +139,19 @@ impl<'src> Parser<'src> {
     pub fn parse_block(&mut self) -> Block {
         if self.token.kind != TokenKind::OpenCurlyBrace { panic!() }
         self.next();
-        let mut block = Block { stmts: vec![] };
+        let mut stmts = vec![];
+        let mut result = None;
         while self.token.kind != TokenKind::CloseCurlyBrace {
             if self.token.kind == TokenKind::End { panic!() }
-            block.stmts.push(self.parse_stmt())
+            if let Some(stmt) = self.parse_stmt() {
+                stmts.push(stmt);
+            } else {
+                result = Some(Box::new(self.parse_expr(Prec::Bracket)));
+                if self.token.kind != TokenKind::CloseCurlyBrace { panic!() }
+            }
         }
         self.next();
-        block
+        Block { stmts, result }
     }
     pub fn parse_fn(&mut self) -> Fun {
         if self.token.kind != TokenKind::Fn { panic!() };
@@ -178,14 +208,14 @@ fn test_parse_bracket() {
 fn test_parse_assign() {
     let mut parser = Parser::new("x = 2 - 3");
     let stmt = parser.parse_stmt();
-    assert_eq!(stmt, Stmt::Assign {
+    assert_eq!(stmt, Some(Stmt::Assign {
         ident: Ident { offset: 0 },
         expr: Expr::Binary {
             left: Box::new(Expr::Integer { offset: 4 }),
             op: BinaryOp::Subtract,
-            right: Box::new(Expr::Integer {offset: 8 }),
+            right: Box::new(Expr::Integer { offset: 8 }),
         }
-    });
+    }));
 }
 
 #[test]

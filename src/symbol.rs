@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::{Fun, Stmt, Ident, Expr};
+use crate::ast::{Fun, Stmt, Ident, Expr, If, Block, Else};
 
 pub struct SymbolTableBuilder<'src> {
     src: &'src str,
@@ -31,30 +31,41 @@ impl<'src> SymbolTableBuilder<'src> {
             scope: HashMap::new(),
             symbol_count: 0,
         };
-        for stmt in &fun.block.stmts {
-            match stmt {
-                Stmt::Let { ident, expr, .. } => {
-                    if let Some(expr) = expr {
-                        names.resolve_expr(&expr)
-                    }
-                    let symbol = names.new_symbol();
-                    names.scope.insert(ident.as_str(names.src), symbol);
-                    names.map_to_symbol(*ident);
-                }
-                Stmt::Assign { ident, expr } => {
-                    names.resolve_expr(expr);
-                    names.map_to_symbol(*ident);
-                }
-                Stmt::Return { expr } => {
-                    names.resolve_expr(expr);
-                }
-            }
-        }
+        names.resolve_block(&fun.block);
         SymbolTable { map: names.map, symbol_count: names.symbol_count }
     }
     fn map_to_symbol(&mut self, ident: Ident) {
         let symbol = self.scope.get(ident.as_str(self.src)).unwrap();
         self.map.insert(ident, *symbol);
+    }
+    fn resolve_block(&mut self, block: &Block) {
+        for stmt in &block.stmts {
+            match stmt {
+                Stmt::Let { ident, expr, .. } => {
+                    if let Some(expr) = expr {
+                        self.resolve_expr(&expr)
+                    }
+                    let symbol = self.new_symbol();
+                    self.scope.insert(ident.as_str(self.src), symbol);
+                    self.map_to_symbol(*ident);
+                }
+                Stmt::Assign { ident, expr } => {
+                    self.resolve_expr(expr);
+                    self.map_to_symbol(*ident);
+                }
+                Stmt::Return { expr } => self.resolve_expr(expr),
+                Stmt::If(if_stmt) => self.resolve_if(if_stmt),
+            }
+        }
+    }
+    fn resolve_if(&mut self, if_stmt: &If) {
+        self.resolve_expr(&if_stmt.cond);
+        self.resolve_block(&if_stmt.if_block);
+        match &if_stmt.else_block {
+            Else::Block(else_block) => self.resolve_block(&else_block),
+            Else::If(if_stmt) => self.resolve_if(&if_stmt),
+            Else::None => (),
+        }
     }
     fn resolve_expr(&mut self, expr: &Expr) {
         match expr {
@@ -65,7 +76,9 @@ impl<'src> SymbolTableBuilder<'src> {
                 self.resolve_expr(left);
                 self.resolve_expr(right);
             }
-            _ => {}
+            Expr::Integer { .. } => {},
+            Expr::Bool(_) => {},
+            // Expr::If(if_stmt) => self.resolve_if(if_stmt),
         }
     }
     fn new_symbol(&mut self) -> Symbol {
