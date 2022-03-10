@@ -1,6 +1,6 @@
 fn test() i32 {
     let x = 2;
-    if false {
+    if 2 > 9 {
         x = 9;
     }
     return x

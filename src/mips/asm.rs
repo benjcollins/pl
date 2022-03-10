@@ -2,14 +2,13 @@ use super::inst::{Inst, OpcodeI, OpcodeJ, Funct};
 
 pub struct AsmBuilder {
     output: String,
-    label_count: u32,
 }
 
 pub struct Label(pub u32);
 
 impl AsmBuilder {
     pub fn new() -> AsmBuilder {
-        AsmBuilder { output: "".to_string(), label_count: 0 }
+        AsmBuilder { output: "".to_string() }
     }
     pub fn push_inst(&mut self, inst: Inst<Label>) {
         self.output.push_str(&format!("  {}\n", inst_to_asm(inst)))

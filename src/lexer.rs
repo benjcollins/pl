@@ -41,6 +41,8 @@ impl<'src> Lexer<'src> {
                 ')' => break self.token_here(TokenKind::CloseBrace),
                 '{' => break self.token_here(TokenKind::OpenCurlyBrace),
                 '}' => break self.token_here(TokenKind::CloseCurlyBrace),
+                '<' => break self.token_here(TokenKind::OpenAngleBrace),
+                '>' => break self.token_here(TokenKind::CloseAngleBrace),
                 '+' => break self.token_here(TokenKind::Plus),
                 '-' => break self.token_here(TokenKind::Minus),
                 '*' => break self.token_here(TokenKind::Asterisk),

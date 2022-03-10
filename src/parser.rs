@@ -9,6 +9,7 @@ pub struct Parser<'src> {
 pub enum Prec {
     Product,
     Sum,
+    Compare,
     Bracket
 }
 
@@ -55,6 +56,8 @@ impl<'src> Parser<'src> {
                 TokenKind::Minus if prec >= Prec::Sum => self.parse_infix(left, BinaryOp::Subtract, Prec::Sum),
                 TokenKind::Asterisk if prec >= Prec::Product => self.parse_infix(left, BinaryOp::Multiply, Prec::Product),
                 TokenKind::ForwardSlash if prec >= Prec::Product => self.parse_infix(left, BinaryOp::Divide, Prec::Product),
+                TokenKind::OpenAngleBrace if prec >= Prec::Compare => self.parse_infix(left, BinaryOp::LessThan, Prec::Compare),
+                TokenKind::CloseAngleBrace if prec >= Prec::Compare => self.parse_infix(left, BinaryOp::GreaterThan, Prec::Compare),
                 _ => break
             }
         }

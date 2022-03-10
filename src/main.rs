@@ -1,7 +1,5 @@
 use std::fs;
 
-use infer::Context;
-use symbol::SymbolTableBuilder;
 use parser::Parser;
 
 use crate::{lexer::Lexer, token::TokenKind};
@@ -10,9 +8,7 @@ mod token;
 mod lexer;
 mod ast;
 mod parser;
-mod symbol;
-mod ty;
-mod infer;
+mod compiler;
 mod mir;
 mod mips;
 
@@ -28,12 +24,12 @@ fn _print_tokens(src: &str) {
 fn main() {
     let src = include_str!("../example.txt");
     let mut parser = Parser::new(src);
-    let fun = parser.parse_fn();
-    let symbols = SymbolTableBuilder::resolve(&fun, src);
-    let (symbol_tys, return_ty) = Context::infer(&fun, &symbols, src);
-    let fun = mir::Compiler::compile_fun(src, &symbols, &symbol_tys, &return_ty, &fun);
+    let fun_ast = parser.parse_fn();
+    let fun_mir = compiler::compile_fun(&fun_ast, src);
+    println!("{:#?}", fun_mir);
+
     let mut pre = include_str!("../pre.a").to_string();
-    let asm = mips::compiler::Compiler::compile_fun(&fun);
+    let asm = mips::compiler::Compiler::compile_fun(&fun_mir);
     pre.push_str(&asm);
     fs::write("output.a", pre).unwrap();
 }

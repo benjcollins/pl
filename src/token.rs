@@ -13,6 +13,8 @@ pub enum TokenKind {
     Minus,
     Asterisk,
     ForwardSlash,
+    OpenAngleBrace,
+    CloseAngleBrace,
 
     Equals,
     Comma,
@@ -69,6 +71,8 @@ impl Token {
             TokenKind::Asterisk => "*".len(),
             TokenKind::ForwardSlash => "/".len(),
             TokenKind::Equals => "=".len(),
+            TokenKind::OpenAngleBrace => "<".len(),
+            TokenKind::CloseAngleBrace => ">".len(),
             TokenKind::Let => "let".len(),
             TokenKind::Fn => "fn".len(),
             TokenKind::True => "true".len(),
