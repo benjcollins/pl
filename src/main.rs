@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, process::Command};
 
 use parser::Parser;
 
@@ -26,10 +26,11 @@ fn main() {
     let mut parser = Parser::new(src);
     let fun_ast = parser.parse_fn();
     let fun_mir = compiler::compile_fun(&fun_ast, src);
-    println!("{:#?}", fun_mir);
+    // println!("{:#?}", fun_mir);
 
     let mut pre = include_str!("../pre.a").to_string();
     let asm = mips::compiler::Compiler::compile_fun(&fun_mir);
     pre.push_str(&asm);
     fs::write("output.a", pre).unwrap();
+    Command::new("spim").arg("-f").arg("output.a").status().unwrap();
 }

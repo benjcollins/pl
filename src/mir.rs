@@ -156,9 +156,10 @@ impl Ty {
 impl IntTy {
     pub fn concrete(&self, fun: &Fun) -> Int {
         match self {
+            IntTy::Any => Int { size: Size::B32, signedness: Signedness::Signed },
             IntTy::Int(int) => *int,
             IntTy::Equal(name) => fun.get_int_ty(*name).concrete(fun),
-            _ => panic!(),
+            _ => panic!("{:?}", self),
         }
     }
 }

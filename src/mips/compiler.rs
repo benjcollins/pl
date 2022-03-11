@@ -88,8 +88,8 @@ impl<'a> Compiler<'a> {
                 assert_eq!(a_ty, b_ty);
                 let reg = self.alloc_temp_reg();
                 let (rs, rt) = match cmp {
-                    Compare::LessThan => (a_reg, b_reg),
-                    Compare::GreaterThan => (b_reg, a_reg),
+                    Compare::LessThan => (b_reg, a_reg),
+                    Compare::GreaterThan => (a_reg, b_reg),
                 };
                 let funct = match a_ty.signedness {
                     Signedness::Signed => Funct::SUB,
