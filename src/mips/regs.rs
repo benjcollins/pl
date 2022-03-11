@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Reg {
     Zero,
@@ -41,19 +43,6 @@ pub enum TempReg {
     T9,
 }
 
-pub const TEMP_REGS: &[TempReg] = &[
-    TempReg::T0,
-    TempReg::T1,
-    TempReg::T2,
-    TempReg::T3,
-    TempReg::T4,
-    TempReg::T5,
-    TempReg::T6,
-    TempReg::T7,
-    TempReg::T8,
-    TempReg::T9,
-];
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SavedReg {
     S0,
@@ -66,46 +55,31 @@ pub enum SavedReg {
     S7,
 }
 
-impl Reg {
-    pub fn name(&self) -> &str {
+impl fmt::Display for Reg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Reg::Zero => "$zero",
-            Reg::ValReg(reg) => match reg {
-                ValReg::V0 => "$v0",
-                ValReg::V1 => "$v1",
-            }
-            Reg::ArgReg(reg) => match reg {
-                ArgReg::A0 => "$a0",
-                ArgReg::A1 => "$a1",
-                ArgReg::A2 => "$a2",
-                ArgReg::A3 => "$a3",
-            }
-            Reg::TempReg(reg) => match reg {
-                TempReg::T0 => "$t0",
-                TempReg::T1 => "$t1",
-                TempReg::T2 => "$t2",
-                TempReg::T3 => "$t3",
-                TempReg::T4 => "$t4",
-                TempReg::T5 => "$t5",
-                TempReg::T6 => "$t6",
-                TempReg::T7 => "$t7",
-                TempReg::T8 => "$t8",
-                TempReg::T9 => "$t9",
-            }
-            Reg::SavedReg(reg) => match reg {
-                SavedReg::S0 => "$s0",
-                SavedReg::S1 => "$s1",
-                SavedReg::S2 => "$s2",
-                SavedReg::S3 => "$s3",
-                SavedReg::S4 => "$s4",
-                SavedReg::S5 => "$s5",
-                SavedReg::S6 => "$s6",
-                SavedReg::S7 => "$s7",
-            }
-            Reg::GP => "$gp",
-            Reg::SP => "$sp",
-            Reg::FP => "$fp",
-            Reg::RA => "$ra",
+            Reg::Zero => write!(f, "$zero"),
+            Reg::ValReg(reg) => write!(f, "$v{}", *reg as u32),
+            Reg::ArgReg(reg) => write!(f, "$a{}", *reg as u32),
+            Reg::TempReg(reg) => write!(f, "$t{}", *reg as u32),
+            Reg::SavedReg(reg) => write!(f, "$s{}", *reg as u32),
+            Reg::GP => write!(f, "$gp"),
+            Reg::SP => write!(f, "$sp"),
+            Reg::FP => write!(f, "$fp"),
+            Reg::RA => write!(f, "$ra"),
         }
     }
 }
+
+pub const TEMP_REGS: &[TempReg] = &[
+    TempReg::T0,
+    TempReg::T1,
+    TempReg::T2,
+    TempReg::T3,
+    TempReg::T4,
+    TempReg::T5,
+    TempReg::T6,
+    TempReg::T7,
+    TempReg::T8,
+    TempReg::T9,
+];

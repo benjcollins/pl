@@ -55,6 +55,10 @@ pub enum Stmt {
     Let { ident: Ident, expr: Option<Expr>, ty: Option<Ty> },
     Assign { ident: Ident, expr: Expr },
     Return { expr: Expr },
+    While {
+        cond: Expr,
+        body: Block,
+    },
     If(If),
 }
 

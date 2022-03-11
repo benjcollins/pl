@@ -26,6 +26,7 @@ pub enum TokenKind {
     Return,
     If,
     Else,
+    While,
     True,
     False,
 
@@ -80,6 +81,7 @@ impl Token {
             TokenKind::If => "if".len(),
             TokenKind::Else => "else".len(),
             TokenKind::Return => "return".len(),
+            TokenKind::While => "while".len(),
             TokenKind::End => 0,
         }
     }

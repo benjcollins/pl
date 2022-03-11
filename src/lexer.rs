@@ -32,6 +32,7 @@ impl<'src> Lexer<'src> {
                         "false" => self.token_here(TokenKind::False),
                         "if" => self.token_here(TokenKind::If),
                         "else" => self.token_here(TokenKind::Else),
+                        "while" => self.token_here(TokenKind::While),
                         _ => ident_token,
                     };
                 }

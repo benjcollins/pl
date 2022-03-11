@@ -38,6 +38,16 @@ impl<'a> Compiler<'a> {
     }
     fn compile_stmt(&mut self, stmt: &ast::Stmt, block_id: &mut mir::BlockId) {
         match stmt {
+            ast::Stmt::While { cond, body } => {
+                let mut loop_block = self.fun.new_block();
+                let cond_block = self.fun.new_block();
+                let exit_block = self.fun.new_block();
+                self.fun.get_block_mut(*block_id).branch = mir::Branch::Static(cond_block);
+                self.fun.get_block_mut(cond_block).branch = self.compile_bool_expr(cond, loop_block, exit_block);
+                self.compile_block(body, &mut loop_block);
+                self.fun.get_block_mut(loop_block).branch = mir::Branch::Static(cond_block);
+                *block_id = exit_block;
+            }
             ast::Stmt::Let { ident, expr, ty: ast_ty } => {
                 let stack_slot = self.scope.len() as u32;
                 let ty = self.fun.new_ty_name(Ty::Any);
@@ -55,9 +65,9 @@ impl<'a> Compiler<'a> {
                 }
             }
             ast::Stmt::Assign { ident, expr } => {
-                let (expr, expr_ty) = self.compile_expr(expr);
+                let (expr, ty) = self.compile_expr(expr);
                 let var = self.lookup_var(*ident);
-                self.unify(var.ty, expr_ty);
+                self.unify(var.ty, ty);
                 self.fun.get_block_mut(*block_id).stmts.push(mir::Stmt::Assign { stack_slot: var.stack_slot, expr });
             }
             ast::Stmt::Return { expr } => {
@@ -199,6 +209,7 @@ impl<'a> Compiler<'a> {
         }, ty)
     }
     fn unify(&mut self, a: TyName, b: TyName) {
+        if a == b { return }
         match (self.fun.get_ty(a), self.fun.get_ty(b)) {
             (&Ty::Equal(a), _) => self.unify(a, b),
             (_, &Ty::Equal(b)) => self.unify(a, b),
@@ -217,6 +228,7 @@ impl<'a> Compiler<'a> {
         }
     }
     fn unify_ints(&mut self, a: IntTyName, b: IntTyName) {
+        if a == b { return }
         match (self.fun.get_int_ty(a), self.fun.get_int_ty(b)) {
             (&IntTy::Equal(a), _) => self.unify_ints(a, b),
             (_, &IntTy::Equal(b)) => self.unify_ints(a, b),

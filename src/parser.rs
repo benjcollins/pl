@@ -93,6 +93,12 @@ impl<'src> Parser<'src> {
                 self.next();
                 Some(Stmt::If(self.parse_if()))
             }
+            TokenKind::While => {
+                self.next();
+                let cond = self.parse_expr(Prec::Bracket);
+                let body = self.parse_block();
+                Some(Stmt::While { cond, body })
+            }
             TokenKind::Let => {
                 self.next();
                 if self.token.kind != TokenKind::Ident { panic!() }
