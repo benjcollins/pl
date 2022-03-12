@@ -1,16 +1,14 @@
 use crate::{token::{Token, TokenKind}, ast::{Expr, BinaryOp, Ident, Stmt, Else, If, Block, Ty, Fun}};
 
-pub fn parse(tokens: &[Token], src: &str) -> ParseResult<Fun> {
+pub fn parse(tokens: &[Token]) -> ParseResult<Fun> {
     let mut parser = Parser {
         index: 0,
-        src,
         tokens,
     };
     parser.parse_fn()
 }
 
 struct Parser<'a> {
-    src: &'a str,
     tokens: &'a [Token],
     index: usize,
 }
