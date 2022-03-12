@@ -1,4 +1,4 @@
-use crate::{mir::{Fun, Int, ConcreteTy, Size, BlockId, Stmt, Branch, Expr, Compare, Signedness, BinaryOp, Assign}};
+use crate::{mir::{Fun, Int, ConcreteTy, Size, BlockId, Stmt, Branch, Expr, CompareOp, Signedness, BinaryOp, Assign}};
 
 use self::regs::{TempReg, TEMP_REGS, Reg, ValReg};
 
@@ -83,7 +83,7 @@ impl<'a> Compiler<'a> {
                 self.output.push_str(&format!("  bne $zero, {}, l{}\n", Reg::TempReg(reg), if_true.id()));
                 self.output.push_str(&format!("  j l{}\n", if_false.id()));
             }
-            Branch::Comparison { a, b, cmp, if_true, if_false } => {
+            Branch::Compare { a, b, cmp, if_true, if_false } => {
                 let (a_reg, a_ty) = match self.compile_expr(a) {
                     Value::Int { reg, ty } => (reg, ty),
                     _ => panic!(),
@@ -95,8 +95,8 @@ impl<'a> Compiler<'a> {
                 assert_eq!(a_ty, b_ty);
                 let reg = self.alloc_temp_reg();
                 let (rs, rt) = match cmp {
-                    Compare::LessThan => (b_reg, a_reg),
-                    Compare::GreaterThan => (a_reg, b_reg),
+                    CompareOp::LessThan => (b_reg, a_reg),
+                    CompareOp::GreaterThan => (a_reg, b_reg),
                 };
                 let op = match a_ty.signedness {
                     Signedness::Signed => "sub",

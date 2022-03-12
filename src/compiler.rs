@@ -143,45 +143,39 @@ impl<'a> Compiler<'a> {
             }
         }
     }
+    fn compile_compare_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::CompareOp, if_true: mir::BlockId, if_false: mir::BlockId) -> mir::Branch {
+        let (left_expr, left_ty) = self.compile_expr(left);
+        let (right_expr, right_ty) = self.compile_expr(right);
+        let int_ty = self.new_int_ty(IntTy::Any);
+        self.unify(int_ty, left_ty);
+        self.unify(int_ty, right_ty);
+        mir::Branch::Compare {
+            a: left_expr,
+            b: right_expr,
+            cmp: op,
+            if_true,
+            if_false,
+        }
+    }
     fn compile_bool_expr(&mut self, expr: &ast::Expr, if_true: mir::BlockId, if_false: mir::BlockId) -> mir::Branch {
         match expr {
-            ast::Expr::Integer { .. } => panic!(),
             ast::Expr::Bool(value) => if *value {
                 mir::Branch::Static(if_true)
             } else {
                 mir::Branch::Static(if_false)
             }
-            ast::Expr::Ident(ident) => {
-                let var = self.lookup_var(*ident);
-                mir::Branch::Bool {
-                    expr: mir::Expr::Load {
-                        stack_slot: var.stack_slot,
-                        ty: self.fun.new_ty_name(Ty::Bool),
-                    },
-                    if_true,
-                    if_false,
-                }
+            ast::Expr::Infix { left, right, op: ast::InfixOp::LessThan } => {
+                self.compile_compare_expr(left, right, mir::CompareOp::LessThan, if_true, if_false)
             }
-            ast::Expr::Infix { left, right, op } => {
-                let (left_expr, left_ty) = self.compile_expr(left);
-                let (right_expr, right_ty) = self.compile_expr(right);
-                let int_ty = self.new_int_ty(IntTy::Any);
-                self.unify(int_ty, left_ty);
-                self.unify(int_ty, right_ty);
-                let cmp = match op {
-                    ast::InfixOp::LessThan => mir::Compare::LessThan,
-                    ast::InfixOp::GreaterThan => mir::Compare::GreaterThan,
-                    _ => panic!(),
-                };
-                mir::Branch::Comparison {
-                    a: left_expr,
-                    b: right_expr,
-                    cmp,
-                    if_true,
-                    if_false,
-                }
+            ast::Expr::Infix { left, right, op: ast::InfixOp::GreaterThan } => {
+                self.compile_compare_expr(left, right, mir::CompareOp::GreaterThan, if_true, if_false)
             }
-            ast::Expr::Prefix { .. } => panic!(),
+            expr => {
+                let (expr, ty) = self.compile_expr(expr);
+                let bool_ty = self.fun.new_ty_name(Ty::Bool);
+                self.unify(ty, bool_ty);
+                mir::Branch::Bool { expr, if_true, if_false }
+            }
         }
     }
     fn compile_expr(&mut self, expr: &ast::Expr) -> (mir::Expr, TyName) {

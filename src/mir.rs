@@ -63,17 +63,17 @@ pub enum Branch {
         if_true: BlockId,
         if_false: BlockId,
     },
-    Comparison {
+    Compare {
         a: Expr,
         b: Expr,
-        cmp: Compare,
+        cmp: CompareOp,
         if_true: BlockId,
         if_false: BlockId,
     }
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Compare {
+pub enum CompareOp {
     LessThan,
     GreaterThan,
 }
