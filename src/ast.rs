@@ -32,15 +32,31 @@ pub enum Expr {
     },
     Bool(bool),
     Ident(Ident),
-    Binary {
+    Infix {
         left: Box<Expr>,
         right: Box<Expr>,
-        op: BinaryOp,
+        op: InfixOp,
     },
+    Prefix {
+        op: PrefixOp,
+        expr: Box<Expr>,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Assign {
+    Deref(Box<Assign>),
+    Name(Ident),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum BinaryOp {
+pub enum PrefixOp {
+    Deref,
+    Ref,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InfixOp {
     Add,
     Subtract,
     Multiply,
@@ -52,7 +68,7 @@ pub enum BinaryOp {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Let { ident: Ident, expr: Option<Expr>, ty: Option<Ty> },
-    Assign { ident: Ident, expr: Expr },
+    Assign { assign: Assign, expr: Expr },
     Return { expr: Expr },
     While {
         cond: Expr,
@@ -62,8 +78,9 @@ pub enum Stmt {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Ty {
-    pub name: Ident,
+pub enum Ty {
+    Name(Ident),
+    Pointer(Box<Ty>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

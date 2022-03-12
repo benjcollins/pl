@@ -1,4 +1,4 @@
-use crate::{mir::{Fun, Int, ConcreteTy, Size, BlockId, Stmt, Branch, Expr, Compare, Signedness, BinaryOp}};
+use crate::{mir::{Fun, Int, ConcreteTy, Size, BlockId, Stmt, Branch, Expr, Compare, Signedness, BinaryOp, Assign}};
 
 use self::regs::{TempReg, TEMP_REGS, Reg, ValReg};
 
@@ -17,11 +17,12 @@ enum Value {
         reg: TempReg,
         ty: Int,
     },
+    Pointer(TempReg),
     Bool(TempReg),
     None,
 }
 
-fn ty_len_bytes(ty: ConcreteTy) -> u32 {
+fn ty_len_bytes(ty: &ConcreteTy) -> u32 {
     match ty {
         ConcreteTy::Bool => 1,
         ConcreteTy::None => 0,
@@ -30,10 +31,11 @@ fn ty_len_bytes(ty: ConcreteTy) -> u32 {
             Size::B16 => 2,
             Size::B32 => 4,
         }
+        ConcreteTy::Ref(_) => 4,
     }
 }
 
-fn ty_align_bytes(ty: ConcreteTy) -> u32 {
+fn ty_align_bytes(ty: &ConcreteTy) -> u32 {
     match ty {
         ConcreteTy::Bool => 1,
         ConcreteTy::None => 0,
@@ -42,6 +44,7 @@ fn ty_align_bytes(ty: ConcreteTy) -> u32 {
             Size::B16 => 2,
             Size::B32 => 4,
         }
+        ConcreteTy::Ref(_) => 4,
     }
 }
 
@@ -105,43 +108,43 @@ impl<'a> Compiler<'a> {
             }
         }
     }
+    fn compile_assign(&mut self, assign: &Assign) -> (Reg, i32) {
+        match assign {
+            Assign::Deref(assign) => {
+                let (base_reg, offset) = self.compile_assign(assign);
+                let reg = self.alloc_temp_reg();
+                self.output.push_str(&format!("  lw {}, {}({})\n", Reg::TempReg(reg), offset, base_reg));
+                (Reg::TempReg(reg), 0)
+            }
+            Assign::Stack(stack_slot) => {
+                let offset = -(self.stack_slots[*stack_slot as usize] as i32);
+                (Reg::FP, offset)
+            }
+        }
+    }
     fn compile_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Alloc(ty_name) => {
                 let ty = self.fun.get_ty(*ty_name).concrete(self.fun);
-                let align = ty_align_bytes(ty);
+                let align = ty_align_bytes(&ty);
                 let padding = if self.stack_len % align == 0 { 0 } else { align - self.stack_len % align };
-                self.stack_len += padding + ty_len_bytes(ty);
+                self.stack_len += padding + ty_len_bytes(&ty);
                 self.stack_slots.push(self.stack_len);
             }
             Stmt::Drop => {
                 self.stack_slots.pop();
                 self.stack_len = *self.stack_slots.last().unwrap_or(&0);
             }
-            Stmt::Assign { stack_slot, expr } => {
+            Stmt::Assign { assign, expr } => {
                 let value = self.compile_expr(expr);
-                match value {
-                    Value::Bool(reg) => {
-                        self.output.push_str(&format!("  sb {}, {}($fp)\n", Reg::TempReg(reg), -(self.stack_slots[*stack_slot as usize] as i16)));
-                        self.free_temp_reg(reg);
-                    }
-                    Value::Int { reg, ty } => {
-                        let op = match ty.size {
-                            Size::B8 => "sb",
-                            Size::B16 => "sh",
-                            Size::B32 => "sw",
-                        };
-                        self.output.push_str(&format!("  {} {}, {}($fp)\n", op, Reg::TempReg(reg), -(self.stack_slots[*stack_slot as usize] as i16)));
-                        self.free_temp_reg(reg);
-                    }
-                    Value::None => panic!(),
-                }
+                let (base_reg, offset) = self.compile_assign(assign);
+                self.store(value, base_reg, offset);
             }
             Stmt::Return(expr) => {
                 let value = self.compile_expr(expr);
                 match value {
                     Value::None => {},
-                    Value::Bool(reg) | Value::Int { reg, .. } => {
+                    Value::Bool(reg) | Value::Int { reg, .. } | Value::Pointer(reg) => {
                         self.output.push_str(&format!("  move {}, {}\n", Reg::ValReg(ValReg::V0), Reg::TempReg(reg)))
                     }
                 }
@@ -163,27 +166,9 @@ impl<'a> Compiler<'a> {
                 Value::Bool(reg)
             }
             Expr::Load { stack_slot, ty } => {
-                match self.fun.get_ty(*ty).concrete(self.fun) {
-                    ConcreteTy::Bool => {
-                        let reg = self.alloc_temp_reg();
-                        self.output.push_str(&format!("  lb {}, {}($fp)\n", Reg::TempReg(reg), -(self.stack_slots[*stack_slot as usize] as i16)));
-                        Value::Bool(reg)
-                    }
-                    ConcreteTy::Int(int) => {
-                        let reg = self.alloc_temp_reg();
-                        let op = match (int.signedness, int.size) {
-                            (Signedness::Signed, Size::B8) => "lb",
-                            (Signedness::Signed, Size::B16) => "lh",
-                            (Signedness::Signed, Size::B32) => "lw",
-                            (Signedness::Unsigned, Size::B8) => "lbu",
-                            (Signedness::Unsigned, Size::B16) => "lhu",
-                            (Signedness::Unsigned, Size::B32) => "lw",
-                        };
-                        self.output.push_str(&format!("  {} {}, {}($fp)\n", op, Reg::TempReg(reg), -(self.stack_slots[*stack_slot as usize] as i16)));
-                        Value::Int { reg, ty: int }
-                    }
-                    ConcreteTy::None => Value::None,
-                }
+                let addr = -(self.stack_slots[*stack_slot as usize] as i32);
+                let ty = self.fun.get_ty(*ty).concrete(self.fun);
+                self.load(ty, Reg::FP, addr)
             }
             Expr::Binary { left, right, op } => {
                 let (left_reg, left_ty) = match self.compile_expr(left) {
@@ -215,6 +200,71 @@ impl<'a> Compiler<'a> {
 
                 Value::Int { reg, ty: left_ty }
             }
+            Expr::Ref(stack_slot) => {
+                let addr = self.stack_slots[*stack_slot as usize];
+                let reg = self.alloc_temp_reg();
+                self.output.push_str(&format!("addi {}, $sp, -{}\n", Reg::TempReg(reg), addr));
+                Value::Pointer(reg)
+            }
+            Expr::Deref { ty, expr } => {
+                let value = self.compile_expr(expr);
+                let reg = match value {
+                    Value::Pointer(reg) => reg,
+                    _ => panic!(),
+                };
+                let ty = self.fun.get_ty(*ty).concrete(self.fun);
+                self.load(ty, Reg::TempReg(reg), 0)
+            }
+        }
+    }
+    fn store(&mut self, value: Value, base_reg: Reg, offset: i32) {
+        match value {
+            Value::Bool(reg) => {
+                self.output.push_str(&format!("  sb {}, {}({})\n", Reg::TempReg(reg), offset, base_reg));
+                self.free_temp_reg(reg);
+            }
+            Value::Int { reg, ty } => {
+                let op = match ty.size {
+                    Size::B8 => "sb",
+                    Size::B16 => "sh",
+                    Size::B32 => "sw",
+                };
+                self.output.push_str(&format!("  {} {}, {}({})\n", op, Reg::TempReg(reg), offset, base_reg));
+                self.free_temp_reg(reg);
+            }
+            Value::Pointer(reg) => {
+                self.output.push_str(&format!("  sw {}, {}({})\n", Reg::TempReg(reg), offset, base_reg));
+                self.free_temp_reg(reg);
+            }
+            Value::None => panic!(),
+        }
+    }
+    fn load(&mut self, ty: ConcreteTy, base_reg: Reg, offset: i32) -> Value {
+        match ty {
+            ConcreteTy::Bool => {
+                let reg = self.alloc_temp_reg();
+                self.output.push_str(&format!("  lb {}, {}({})\n", Reg::TempReg(reg), offset, base_reg));
+                Value::Bool(reg)
+            }
+            ConcreteTy::Int(int) => {
+                let reg = self.alloc_temp_reg();
+                let op = match (int.signedness, int.size) {
+                    (Signedness::Signed, Size::B8) => "lb",
+                    (Signedness::Signed, Size::B16) => "lh",
+                    (Signedness::Signed, Size::B32) => "lw",
+                    (Signedness::Unsigned, Size::B8) => "lbu",
+                    (Signedness::Unsigned, Size::B16) => "lhu",
+                    (Signedness::Unsigned, Size::B32) => "lw",
+                };
+                self.output.push_str(&format!("  {} {}, {}({})\n", op, Reg::TempReg(reg), offset, base_reg));
+                Value::Int { reg, ty: int }
+            }
+            ConcreteTy::Ref(_) => {
+                let reg = self.alloc_temp_reg();
+                self.output.push_str(&format!("  lw {}, {}({})\n", Reg::TempReg(reg), offset, base_reg));
+                Value::Pointer(reg)
+            }
+            ConcreteTy::None => Value::None,
         }
     }
     fn alloc_temp_reg(&mut self) -> TempReg {

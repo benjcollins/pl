@@ -31,6 +31,7 @@ pub enum Ty {
     Any,
     Equal(TyName),
     Bool,
+    Ref(TyName),
     None,
     Int(IntTyName),
 }
@@ -42,11 +43,12 @@ pub enum IntTy {
     Int(Int),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ConcreteTy {
     None,
     Bool,
     Int(Int),
+    Ref(Box<ConcreteTy>),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -89,9 +91,15 @@ pub enum Stmt {
     Drop,
     Return(Expr),
     Assign {
-        stack_slot: u32,
+        assign: Assign,
         expr: Expr,
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum Assign {
+    Deref(Box<Assign>),
+    Stack(u32),
 }
 
 #[derive(Debug, Clone)]
@@ -109,7 +117,12 @@ pub enum Expr {
     Load {
         stack_slot: u32,
         ty: TyName,
-    }
+    },
+    Ref(u32),
+    Deref {
+        expr: Box<Expr>,
+        ty: TyName,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -138,7 +151,8 @@ impl Ty {
             Ty::None => ConcreteTy::None,
             Ty::Int(name) => ConcreteTy::Int(fun.get_int_ty(*name).concrete(fun)),
             Ty::Equal(name) => fun.get_ty(*name).concrete(fun),
-            _ => panic!(),
+            Ty::Ref(ty) => ConcreteTy::Ref(Box::new(fun.get_ty(*ty).concrete(fun))),
+            Ty::Any => panic!(),
         }
     }
 }

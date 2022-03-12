@@ -57,18 +57,18 @@ impl<'a> Compiler<'a> {
                 if let Some(expr) = expr {
                     let (expr, expr_ty) = self.compile_expr(expr);
                     self.unify(ty, expr_ty);
-                    self.fun.get_block_mut(*block_id).stmts.push(mir::Stmt::Assign { stack_slot, expr });
+                    self.fun.get_block_mut(*block_id).stmts.push(mir::Stmt::Assign { assign: mir::Assign::Stack(stack_slot), expr });
                 }
                 if let Some(ast_ty) = ast_ty {
                     let ast_ty = self.compile_ty(ast_ty);
                     self.unify(ty, ast_ty);
                 }
             }
-            ast::Stmt::Assign { ident, expr } => {
-                let (expr, ty) = self.compile_expr(expr);
-                let var = self.lookup_var(*ident);
-                self.unify(var.ty, ty);
-                self.fun.get_block_mut(*block_id).stmts.push(mir::Stmt::Assign { stack_slot: var.stack_slot, expr });
+            ast::Stmt::Assign { assign, expr } => {
+                let (expr, expr_ty) = self.compile_expr(expr);
+                let (assign, ty) = self.compile_assign(assign);
+                self.unify(expr_ty, ty);
+                self.fun.get_block_mut(*block_id).stmts.push(mir::Stmt::Assign { assign, expr });
             }
             ast::Stmt::Return { expr } => {
                 let (expr, ty) = self.compile_expr(expr);
@@ -76,6 +76,18 @@ impl<'a> Compiler<'a> {
                 self.fun.get_block_mut(*block_id).stmts.push(mir::Stmt::Return(expr))
             }
             ast::Stmt::If(if_stmt) => self.compile_if(if_stmt, block_id),
+        }
+    }
+    fn compile_assign(&mut self, assign: &ast::Assign) -> (mir::Assign, TyName) {
+        match assign {
+            ast::Assign::Deref(assign) => {
+                let (assign, ty) = self.compile_assign(assign);
+                (mir::Assign::Deref(Box::new(assign)), self.deref_ty(ty))
+            }
+            ast::Assign::Name(name) => {
+                let var = self.lookup_var(*name);
+                (mir::Assign::Stack(var.stack_slot), var.ty)
+            }
         }
     }
     fn compile_if(&mut self, if_stmt: &ast::If, block_id: &mut mir::BlockId) {
@@ -111,18 +123,24 @@ impl<'a> Compiler<'a> {
         self.fun.new_ty_name(Ty::Int(int_ty))
     }
     fn compile_ty(&mut self, ty: &ast::Ty) -> TyName {
-        match ty.name.as_str(self.src) {
-            "u8" => self.new_int_ty(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B8 })),
-            "u16" => self.new_int_ty(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B16 })),
-            "u32" => self.new_int_ty(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B32 })),
-            
-            "i8" => self.new_int_ty(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B8 })),
-            "i16" => self.new_int_ty(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B16 })),
-            "i32" => self.new_int_ty(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B32 })),
-
-            "bool" => self.fun.new_ty_name(Ty::Bool),
-
-            _ => panic!(),
+        match ty {
+            ast::Ty::Name(name) => match name.as_str(self.src) {
+                "u8" => self.new_int_ty(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B8 })),
+                "u16" => self.new_int_ty(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B16 })),
+                "u32" => self.new_int_ty(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B32 })),
+                
+                "i8" => self.new_int_ty(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B8 })),
+                "i16" => self.new_int_ty(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B16 })),
+                "i32" => self.new_int_ty(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B32 })),
+    
+                "bool" => self.fun.new_ty_name(Ty::Bool),
+    
+                _ => panic!(),
+            }
+            ast::Ty::Pointer(ty) => {
+                let ty = self.compile_ty(ty);
+                self.fun.new_ty_name(Ty::Ref(ty))
+            }
         }
     }
     fn compile_bool_expr(&mut self, expr: &ast::Expr, if_true: mir::BlockId, if_false: mir::BlockId) -> mir::Branch {
@@ -144,15 +162,15 @@ impl<'a> Compiler<'a> {
                     if_false,
                 }
             }
-            ast::Expr::Binary { left, right, op } => {
+            ast::Expr::Infix { left, right, op } => {
                 let (left_expr, left_ty) = self.compile_expr(left);
                 let (right_expr, right_ty) = self.compile_expr(right);
                 let int_ty = self.new_int_ty(IntTy::Any);
                 self.unify(int_ty, left_ty);
                 self.unify(int_ty, right_ty);
                 let cmp = match op {
-                    ast::BinaryOp::LessThan => mir::Compare::LessThan,
-                    ast::BinaryOp::GreaterThan => mir::Compare::GreaterThan,
+                    ast::InfixOp::LessThan => mir::Compare::LessThan,
+                    ast::InfixOp::GreaterThan => mir::Compare::GreaterThan,
                     _ => panic!(),
                 };
                 mir::Branch::Comparison {
@@ -163,6 +181,7 @@ impl<'a> Compiler<'a> {
                     if_false,
                 }
             }
+            ast::Expr::Prefix { .. } => panic!(),
         }
     }
     fn compile_expr(&mut self, expr: &ast::Expr) -> (mir::Expr, TyName) {
@@ -176,16 +195,16 @@ impl<'a> Compiler<'a> {
             ast::Expr::Bool(value) =>  {
                 (mir::Expr::Bool(*value), self.fun.new_ty_name(Ty::Bool))
             }
-            ast::Expr::Binary { left, right, op } => {
+            ast::Expr::Infix { left, right, op } => {
                 let (left_expr, left_ty) = self.compile_expr(left);
                 let (right_expr, right_ty) = self.compile_expr(right);
                 match op {
-                    ast::BinaryOp::Add => self.compile_binary_expr(mir::BinaryOp::Add, left_expr, right_expr, left_ty, right_ty),
-                    ast::BinaryOp::Subtract => self.compile_binary_expr(mir::BinaryOp::Subtract, left_expr, right_expr, left_ty, right_ty),
-                    ast::BinaryOp::Multiply => self.compile_binary_expr(mir::BinaryOp::Multiply, left_expr, right_expr, left_ty, right_ty),
-                    ast::BinaryOp::Divide => self.compile_binary_expr(mir::BinaryOp::Divide, left_expr, right_expr, left_ty, right_ty),
-                    ast::BinaryOp::LessThan => todo!(),
-                    ast::BinaryOp::GreaterThan => todo!(),
+                    ast::InfixOp::Add => self.compile_binary_expr(mir::BinaryOp::Add, left_expr, right_expr, left_ty, right_ty),
+                    ast::InfixOp::Subtract => self.compile_binary_expr(mir::BinaryOp::Subtract, left_expr, right_expr, left_ty, right_ty),
+                    ast::InfixOp::Multiply => self.compile_binary_expr(mir::BinaryOp::Multiply, left_expr, right_expr, left_ty, right_ty),
+                    ast::InfixOp::Divide => self.compile_binary_expr(mir::BinaryOp::Divide, left_expr, right_expr, left_ty, right_ty),
+                    ast::InfixOp::LessThan => todo!(),
+                    ast::InfixOp::GreaterThan => todo!(),
                 }
             }
             ast::Expr::Ident(ident) => {
@@ -195,6 +214,34 @@ impl<'a> Compiler<'a> {
                     ty: var.ty,
                 }, var.ty)
             }
+            ast::Expr::Prefix { op, expr } => match op {
+                ast::PrefixOp::Deref => {
+                    let (expr, ty) = self.compile_expr(expr);
+                    let ty = self.deref_ty(ty);
+                    (mir::Expr::Deref { expr: Box::new(expr), ty }, ty)
+                }
+                ast::PrefixOp::Ref => match &**expr {
+                    ast::Expr::Ident(name) => {
+                        let var = self.lookup_var(*name);
+                        let ty = self.fun.new_ty_name(Ty::Ref(var.ty));
+                        (mir::Expr::Ref(var.stack_slot), ty)
+                    }
+                    _ => panic!(),
+                }
+            }
+        }
+    }
+    fn deref_ty(&mut self, ty: TyName) -> TyName {
+        match self.fun.get_ty(ty) {
+            Ty::Any => {
+                let any_ty = self.fun.new_ty_name(Ty::Any);
+                let ref_ty = self.fun.new_ty_name(Ty::Ref(any_ty));
+                self.unify(ty, ref_ty);
+                any_ty
+            }
+            &Ty::Equal(ty) => self.deref_ty(ty),
+            Ty::Ref(ty) => *ty,
+            _ => panic!(),
         }
     }
     fn compile_binary_expr(&mut self, op: mir::BinaryOp, left_expr: mir::Expr, right_expr: mir::Expr, left_ty: TyName, right_ty: TyName) -> (mir::Expr, TyName) {
@@ -219,12 +266,13 @@ impl<'a> Compiler<'a> {
 
             (Ty::Bool, Ty::Bool) => (),
             (Ty::None, Ty::None) => (),
-
-            (Ty::Int(_), Ty::Bool) | (Ty::Bool, Ty::Int(_)) => panic!(),
-            (Ty::Bool, Ty::None) | (Ty::None, Ty::Bool) => panic!(),
-            (Ty::None, Ty::Int(_)) | (Ty::Int(_), Ty::None) => panic!(),
-            
             (&Ty::Int(a), &Ty::Int(b)) => self.unify_ints(a, b),
+            (&Ty::Ref(a), &Ty::Ref(b)) => self.unify(a, b),
+
+            (Ty::Int(_), _) | (_, Ty::Int(_)) => panic!(),
+            (Ty::Bool, _) | (_, Ty::Bool) => panic!(),
+            (Ty::None, _) | (_, Ty::None) => panic!(),
+            (Ty::Ref(_), _) | (_, Ty::Ref(_)) => panic!(),
         }
     }
     fn unify_ints(&mut self, a: IntTyName, b: IntTyName) {

@@ -21,6 +21,7 @@ pub enum TokenKind {
     Comma,
     Colon,
     Semicolon,
+    Ampersand,
 
     Let,
     Fn,
