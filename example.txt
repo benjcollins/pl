@@ -2,5 +2,5 @@ fn test() i32 {
     let a = 3;
     let b = &a;
     *b = 9;
-    return *b + a;
+    return *b;
 }

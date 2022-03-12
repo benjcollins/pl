@@ -43,14 +43,7 @@ impl<'a> Compiler<'a> {
                 let cond_block = self.fun.new_block();
                 let exit_block = self.fun.new_block();
                 self.fun.get_block_mut(*block_id).branch = mir::Branch::Static(cond_block);
-                let (cond_expr, cond_ty) = self.compile_expr(cond);
-                let bool_ty = self.fun.new_ty_name(Ty::Bool);
-                self.unify(bool_ty, cond_ty);
-                self.fun.get_block_mut(*block_id).branch = mir::Branch::Conditional {
-                    expr: cond_expr,
-                    if_true: loop_block,
-                    if_false: exit_block,
-                };
+                self.fun.get_block_mut(cond_block).branch = self.compile_bool_expr(cond, loop_block, exit_block);
                 self.compile_block(body, &mut loop_block);
                 self.fun.get_block_mut(loop_block).branch = mir::Branch::Static(cond_block);
                 *block_id = exit_block;
@@ -101,14 +94,7 @@ impl<'a> Compiler<'a> {
         let mut if_block_id = self.fun.new_block();
         let mut else_block_id = self.fun.new_block();
         self.compile_block(&if_stmt.if_block, &mut if_block_id);
-        let (cond_expr, cond_ty) = self.compile_expr(&if_stmt.cond);
-        let bool_ty = self.fun.new_ty_name(Ty::Bool);
-        self.unify(bool_ty, cond_ty);
-        self.fun.get_block_mut(*block_id).branch = mir::Branch::Conditional {
-            expr: cond_expr,
-            if_true: if_block_id,
-            if_false: else_block_id,
-        };
+        self.fun.get_block_mut(*block_id).branch = self.compile_bool_expr(&if_stmt.cond, if_block_id, else_block_id);
 
         match &if_stmt.else_block {
             ast::Else::Block(else_ast_block) => {
@@ -155,6 +141,47 @@ impl<'a> Compiler<'a> {
                 let ty = self.compile_ty(ty);
                 self.fun.new_ty_name(Ty::Ref(ty))
             }
+        }
+    }
+    fn compile_bool_expr(&mut self, expr: &ast::Expr, if_true: mir::BlockId, if_false: mir::BlockId) -> mir::Branch {
+        match expr {
+            ast::Expr::Integer { .. } => panic!(),
+            ast::Expr::Bool(value) => if *value {
+                mir::Branch::Static(if_true)
+            } else {
+                mir::Branch::Static(if_false)
+            }
+            ast::Expr::Ident(ident) => {
+                let var = self.lookup_var(*ident);
+                mir::Branch::Bool {
+                    expr: mir::Expr::Load {
+                        stack_slot: var.stack_slot,
+                        ty: self.fun.new_ty_name(Ty::Bool),
+                    },
+                    if_true,
+                    if_false,
+                }
+            }
+            ast::Expr::Infix { left, right, op } => {
+                let (left_expr, left_ty) = self.compile_expr(left);
+                let (right_expr, right_ty) = self.compile_expr(right);
+                let int_ty = self.new_int_ty(IntTy::Any);
+                self.unify(int_ty, left_ty);
+                self.unify(int_ty, right_ty);
+                let cmp = match op {
+                    ast::InfixOp::LessThan => mir::Compare::LessThan,
+                    ast::InfixOp::GreaterThan => mir::Compare::GreaterThan,
+                    _ => panic!(),
+                };
+                mir::Branch::Comparison {
+                    a: left_expr,
+                    b: right_expr,
+                    cmp,
+                    if_true,
+                    if_false,
+                }
+            }
+            ast::Expr::Prefix { .. } => panic!(),
         }
     }
     fn compile_expr(&mut self, expr: &ast::Expr) -> (mir::Expr, TyName) {

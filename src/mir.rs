@@ -58,11 +58,24 @@ pub struct BlockId(u32);
 pub enum Branch {
     End,
     Static(BlockId),
-    Conditional {
+    Bool {
         expr: Expr,
         if_true: BlockId,
         if_false: BlockId,
     },
+    Comparison {
+        a: Expr,
+        b: Expr,
+        cmp: Compare,
+        if_true: BlockId,
+        if_false: BlockId,
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Compare {
+    LessThan,
+    GreaterThan,
 }
 
 #[derive(Debug, Clone)]
@@ -118,14 +131,6 @@ pub enum BinaryOp {
     Subtract,
     Multiply,
     Divide,
-
-    Compare(CompareOp),
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum CompareOp {
-    LessThan,
-    GreaterThan,
 }
 
 pub struct BlockIdIter {
