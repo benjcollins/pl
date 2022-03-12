@@ -203,7 +203,7 @@ impl<'a> Compiler<'a> {
             Expr::Ref(stack_slot) => {
                 let addr = self.stack_slots[*stack_slot as usize];
                 let reg = self.alloc_temp_reg();
-                self.output.push_str(&format!("addi {}, $sp, -{}\n", Reg::TempReg(reg), addr));
+                self.output.push_str(&format!("  addi {}, $sp, -{}\n", Reg::TempReg(reg), addr));
                 Value::Pointer(reg)
             }
             Expr::Deref { ty, expr } => {
