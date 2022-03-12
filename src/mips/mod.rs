@@ -1,4 +1,4 @@
-use crate::{mir::{Fun, Int, ConcreteTy, Size, BlockId, Stmt, Branch, Expr, Compare, Signedness, BinaryOp, Assign}};
+use crate::{mir::{Fun, Int, ConcreteTy, Size, BlockId, Stmt, Branch, Expr, Signedness, BinaryOp, Assign, CompareOp}};
 
 use self::regs::{TempReg, TEMP_REGS, Reg, ValReg};
 
@@ -74,37 +74,44 @@ impl<'a> Compiler<'a> {
             Branch::Static(block_id) => {
                 self.output.push_str(&format!("  j l{}\n", block_id.id()))
             }
-            Branch::Bool { expr, if_true, if_false } => {
-                let value = self.compile_expr(expr);
-                let reg = match value {
-                    Value::Bool(reg) => reg,
-                    _ => panic!(),
-                };
-                self.output.push_str(&format!("  bne $zero, {}, l{}\n", Reg::TempReg(reg), if_true.id()));
-                self.output.push_str(&format!("  j l{}\n", if_false.id()));
-            }
-            Branch::Comparison { a, b, cmp, if_true, if_false } => {
-                let (a_reg, a_ty) = match self.compile_expr(a) {
-                    Value::Int { reg, ty } => (reg, ty),
-                    _ => panic!(),
-                };
-                let (b_reg, b_ty) = match self.compile_expr(b) {
-                    Value::Int { reg, ty } => (reg, ty),
-                    _ => panic!(),
-                };
-                assert_eq!(a_ty, b_ty);
-                let reg = self.alloc_temp_reg();
-                let (rs, rt) = match cmp {
-                    Compare::LessThan => (b_reg, a_reg),
-                    Compare::GreaterThan => (a_reg, b_reg),
-                };
-                let op = match a_ty.signedness {
-                    Signedness::Signed => "sub",
-                    Signedness::Unsigned => "subu",
-                };
-                self.output.push_str(&format!("  {} {} {} {}\n", op, Reg::TempReg(reg), Reg::TempReg(rs), Reg::TempReg(rt)));
-                self.output.push_str(&format!("  bgtz {}, l{}\n", Reg::TempReg(reg), if_true.id()));
-                self.output.push_str(&format!("  j l{}\n", if_false.id()));
+            Branch::Conditional { expr, if_true, if_false } => {
+                match expr {
+                    Expr::Binary { left, right, op: BinaryOp::Compare(cmp) } => {
+                        let (left_reg, left_ty) = match self.compile_expr(left) {
+                            Value::Int { reg, ty } => (reg, ty),
+                            _ => panic!(),
+                        };
+                        let (right_reg, right_ty) = match self.compile_expr(right) {
+                            Value::Int { reg, ty } => (reg, ty),
+                            _ => panic!(),
+                        };
+                        assert_eq!(left_ty, right_ty);
+                        let reg = self.alloc_temp_reg();
+                        let (rs, rt) = match cmp {
+                            CompareOp::LessThan => (right_reg, left_reg),
+                            CompareOp::GreaterThan => (left_reg, right_reg),
+                        };
+                        let op = match left_ty.signedness {
+                            Signedness::Signed => "sub",
+                            Signedness::Unsigned => "subu",
+                        };
+                        self.output.push_str(&format!("  {} {} {} {}\n", op, Reg::TempReg(reg), Reg::TempReg(rs), Reg::TempReg(rt)));
+                        self.output.push_str(&format!("  bgtz {}, l{}\n", Reg::TempReg(reg), if_true.id()));
+                        self.output.push_str(&format!("  j l{}\n", if_false.id()));
+                    }
+                    Expr::Bool(value) => {
+                        self.output.push_str(&format!("  j l{}\n", if *value { if_true.id() } else { if_false.id() }));
+                    }
+                    expr => {
+                        let value = self.compile_expr(expr);
+                        let reg = match value {
+                            Value::Bool(reg) => reg,
+                            _ => panic!(),
+                        };
+                        self.output.push_str(&format!("  bne $zero, {}, l{}\n", Reg::TempReg(reg), if_true.id()));
+                        self.output.push_str(&format!("  j l{}\n", if_false.id()));
+                    }
+                }
             }
         }
     }
@@ -190,6 +197,8 @@ impl<'a> Compiler<'a> {
                     (BinaryOp::Multiply, Signedness::Unsigned) => todo!(),
                     (BinaryOp::Divide, Signedness::Signed) => todo!(),
                     (BinaryOp::Divide, Signedness::Unsigned) => todo!(),
+                    
+                    _ => panic!(),
                 };
                 let reg = self.alloc_temp_reg();
                 
