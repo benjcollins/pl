@@ -1,4 +1,4 @@
-use crate::{ast, mir::{self, Ty, IntTy, TyName, Int, Signedness, Size, IntTyName}, token::{Token, TokenKind}};
+use crate::{ast, mir::{self, Ty, IntTy, TyName, Int, Signedness, Size, IntTyName}};
 
 struct Compiler<'a> {
     src: &'a str,
@@ -167,10 +167,10 @@ impl<'a> Compiler<'a> {
     }
     fn compile_expr(&mut self, expr: &ast::Expr) -> (mir::Expr, TyName) {
         match expr {
-            ast::Expr::Integer { offset } => {
+            ast::Expr::Integer { start, end } => {
                 let int_ty = self.fun.new_int_ty_name(IntTy::Any);
                 let ty = self.fun.new_ty_name(Ty::Int(int_ty));
-                let value = Token::new(*offset, TokenKind::Integer).as_str(self.src).parse().unwrap();
+                let value = self.src[*start..*end].parse().unwrap();
                 (mir::Expr::Int { value, ty: int_ty }, ty)
             }
             ast::Expr::Bool(value) =>  {

@@ -1,37 +1,63 @@
-use crate::{lexer::Lexer, token::{TokenKind, Token}, ast::{Expr, BinaryOp, Ident, Stmt, Fun, Ty, Block, Else, If}};
+use crate::{token::{Token, TokenKind}, ast::{Expr, BinaryOp, Ident, Stmt, Else, If, Block, Ty, Fun}};
 
-pub struct Parser<'src> {
-    lexer: Lexer<'src>,
-    token: Token,
+pub fn parse(tokens: &[Token], src: &str) -> ParseResult<Fun> {
+    let mut parser = Parser {
+        index: 0,
+        src,
+        tokens,
+    };
+    parser.parse_fn()
+}
+
+struct Parser<'a> {
+    src: &'a str,
+    tokens: &'a [Token],
+    index: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub enum Prec {
+enum Prec {
     Product,
     Sum,
     Compare,
     Bracket
 }
 
-impl<'src> Parser<'src> {
-    pub fn new(source: &'src str) -> Parser<'src> {
-        let mut lexer = Lexer::new(source);
-        let token = lexer.next();
-        Parser { lexer, token }
-    }
+#[derive(Debug)]
+pub struct ParseError {
+    token: Token,
+}
+
+type ParseResult<T> = Result<T, ParseError>;
+
+impl<'a> Parser<'a> {
     fn next(&mut self) {
-        self.token = self.lexer.next();
+        self.index += 1;
     }
-    pub fn parse_expr(&mut self, prec: Prec) -> Expr {
-        let token = self.token;
-        let mut left = match self.token.kind {
+    fn peek(&self) -> Token {
+        self.tokens[self.index]
+    }
+    fn eat(&mut self, kind: TokenKind) -> ParseResult<()> {
+        if self.peek().kind == kind {
+            self.next();
+            Ok(())
+        } else {
+            Err(self.unexpected_token())
+        }
+    }
+    fn unexpected_token(&self) -> ParseError {
+        ParseError { token: self.peek() }
+    }
+    fn parse_expr(&mut self, prec: Prec) -> ParseResult<Expr> {
+        let token = self.peek();
+        let mut left = match self.peek().kind {
             TokenKind::Ident => {
                 self.next();
-                Expr::Ident(Ident { offset: token.offset })
+                Expr::Ident(Ident { start: token.start, end: token.end })
             }
             TokenKind::Integer => {
                 self.next();
-                Expr::Integer { offset: token.offset }
+                Expr::Integer { start: token.start, end: token.end }
             }
             TokenKind::True => {
                 self.next();
@@ -43,196 +69,127 @@ impl<'src> Parser<'src> {
             }
             TokenKind::OpenBrace => {
                 self.next();
-                let expr = self.parse_expr(Prec::Bracket);
-                if self.token.kind != TokenKind::CloseBrace { panic!() }
+                let expr = self.parse_expr(Prec::Bracket)?;
+                if self.peek().kind != TokenKind::CloseBrace { panic!() }
                 self.next();
                 expr
             }
-            _ => panic!("{:?}", self.token.kind),
+            _ => Err(self.unexpected_token())?,
         };
         loop {
-            left = match self.token.kind {
-                TokenKind::Plus if prec >= Prec::Sum => self.parse_infix(left, BinaryOp::Add, Prec::Sum),
-                TokenKind::Minus if prec >= Prec::Sum => self.parse_infix(left, BinaryOp::Subtract, Prec::Sum),
-                TokenKind::Asterisk if prec >= Prec::Product => self.parse_infix(left, BinaryOp::Multiply, Prec::Product),
-                TokenKind::ForwardSlash if prec >= Prec::Product => self.parse_infix(left, BinaryOp::Divide, Prec::Product),
-                TokenKind::OpenAngleBrace if prec >= Prec::Compare => self.parse_infix(left, BinaryOp::LessThan, Prec::Compare),
-                TokenKind::CloseAngleBrace if prec >= Prec::Compare => self.parse_infix(left, BinaryOp::GreaterThan, Prec::Compare),
+            left = match self.peek().kind {
+                TokenKind::Plus if prec >= Prec::Sum => self.parse_infix(left, BinaryOp::Add, Prec::Sum)?,
+                TokenKind::Minus if prec >= Prec::Sum => self.parse_infix(left, BinaryOp::Subtract, Prec::Sum)?,
+                TokenKind::Asterisk if prec >= Prec::Product => self.parse_infix(left, BinaryOp::Multiply, Prec::Product)?,
+                TokenKind::ForwardSlash if prec >= Prec::Product => self.parse_infix(left, BinaryOp::Divide, Prec::Product)?,
+                TokenKind::OpenAngleBrace if prec >= Prec::Compare => self.parse_infix(left, BinaryOp::LessThan, Prec::Compare)?,
+                TokenKind::CloseAngleBrace if prec >= Prec::Compare => self.parse_infix(left, BinaryOp::GreaterThan, Prec::Compare)?,
                 _ => break
             }
         }
-        left
+        Ok(left)
     }
-    pub fn parse_infix(&mut self, left: Expr, op: BinaryOp, prec: Prec) -> Expr {
+    fn parse_infix(&mut self, left: Expr, op: BinaryOp, prec: Prec) -> ParseResult<Expr> {
         self.next();
-        let right = self.parse_expr(prec);
-        Expr::Binary {
+        let right = self.parse_expr(prec)?;
+        Ok(Expr::Binary {
             left: Box::new(left),
             right: Box::new(right),
             op,
-        }
+        })
     }
-    fn parse_if(&mut self) -> If {
-        let cond = Box::new(self.parse_expr(Prec::Bracket));
-        let if_block = self.parse_block();
-        let else_block = if self.token.kind == TokenKind::Else {
+    fn parse_if(&mut self) -> ParseResult<If> {
+        let cond = Box::new(self.parse_expr(Prec::Bracket)?);
+        let if_block = self.parse_block()?;
+        let else_block = if self.peek().kind == TokenKind::Else {
             self.next();
-            if self.token.kind == TokenKind::If {
-                Else::If(Box::new(self.parse_if()))
+            if self.peek().kind == TokenKind::If {
+                Else::If(Box::new(self.parse_if()?))
             } else {
-                Else::Block(self.parse_block())
+                Else::Block(self.parse_block()?)
             }
         } else {
             Else::None
         };
-        If { cond, if_block, else_block }
+        Ok(If { cond, if_block, else_block })
     }
-    pub fn parse_stmt(&mut self) -> Option<Stmt> {
-        match self.token.kind {
+    fn parse_stmt(&mut self) -> ParseResult<Stmt> {
+        Ok(match self.peek().kind {
             TokenKind::If => {
                 self.next();
-                Some(Stmt::If(self.parse_if()))
+                Stmt::If(self.parse_if()?)
             }
             TokenKind::While => {
                 self.next();
-                let cond = self.parse_expr(Prec::Bracket);
-                let body = self.parse_block();
-                Some(Stmt::While { cond, body })
+                let cond = self.parse_expr(Prec::Bracket)?;
+                let body = self.parse_block()?;
+                Stmt::While { cond, body }
             }
             TokenKind::Let => {
                 self.next();
-                if self.token.kind != TokenKind::Ident { panic!() }
-                let ident = Ident { offset: self.token.offset };
-                self.next();
-                let ty = if self.token.kind == TokenKind::Colon {
+                let token = self.peek();
+                self.eat(TokenKind::Ident)?;
+                let ident = Ident { start: token.start, end: token.end };
+
+                let ty = if self.peek().kind == TokenKind::Colon {
                     self.next();
-                    Some(self.parse_ty())
+                    Some(self.parse_ty()?)
                 } else {
                     None
                 };
-                let expr = if self.token.kind == TokenKind::Equals {
+                let expr = if self.peek().kind == TokenKind::Equals {
                     self.next();
-                    Some(self.parse_expr(Prec::Bracket))
+                    Some(self.parse_expr(Prec::Bracket)?)
                 } else {
                     None
                 };
-                if self.token.kind != TokenKind::Semicolon { panic!() }
-                self.next();
-                Some(Stmt::Let { ident, expr, ty })
+                Stmt::Let { ident, expr, ty }
             }
             TokenKind::Return => {
                 self.next();
-                let expr = self.parse_expr(Prec::Bracket);
-                if self.token.kind != TokenKind::CloseCurlyBrace { panic!() }
-                Some(Stmt::Return { expr })
+                let expr = self.parse_expr(Prec::Bracket)?;
+                Stmt::Return { expr }
             }
             TokenKind::Ident => {
-                let ident = Ident { offset: self.token.offset };
+                let ident = Ident { start: self.peek().start, end: self.peek().end };
                 self.next();
-                if self.token.kind != TokenKind::Equals { panic!() }
-                self.next();
-                let expr = self.parse_expr(Prec::Bracket);
-                if self.token.kind != TokenKind::Semicolon { panic!() }
-                self.next();
-                Some(Stmt::Assign { ident, expr })
+                self.eat(TokenKind::Equals)?;
+                let expr = self.parse_expr(Prec::Bracket)?;
+                Stmt::Assign { ident, expr }
             }
-            _ => None,
-        }
+            _ => Err(self.unexpected_token())?,
+        })
     }
-    pub fn parse_ty(&mut self) -> Ty {
-        if self.token.kind != TokenKind::Ident { panic!() };
-        let name = Ident { offset: self.token.offset };
-        self.next();
-        Ty { name }
+    fn parse_ty(&mut self) -> ParseResult<Ty> {
+        let token = self.peek();
+        self.eat(TokenKind::Ident)?;
+        let name = Ident { start: token.start, end: token.end };
+        Ok(Ty { name })
     }
-    pub fn parse_block(&mut self) -> Block {
-        if self.token.kind != TokenKind::OpenCurlyBrace { panic!() }
-        self.next();
+    fn parse_block(&mut self) -> ParseResult<Block> {
+        self.eat(TokenKind::OpenCurlyBrace)?;
         let mut stmts = vec![];
-        let mut result = None;
-        while self.token.kind != TokenKind::CloseCurlyBrace {
-            if self.token.kind == TokenKind::End { panic!() }
-            if let Some(stmt) = self.parse_stmt() {
-                stmts.push(stmt);
-            } else {
-                result = Some(Box::new(self.parse_expr(Prec::Bracket)));
-                if self.token.kind != TokenKind::CloseCurlyBrace { panic!() }
-            }
+        while self.peek().kind != TokenKind::CloseCurlyBrace {
+            stmts.push(self.parse_stmt()?);
         }
         self.next();
-        Block { stmts, result }
+        Ok(Block { stmts })
     }
-    pub fn parse_fn(&mut self) -> Fun {
-        if self.token.kind != TokenKind::Fn { panic!() };
-        self.next();
-        if self.token.kind != TokenKind::Ident { panic!() };
-        let name = Ident { offset: self.token.offset };
-        self.next();
-        if self.token.kind != TokenKind::OpenBrace { panic!() };
-        self.next();
+    fn parse_fn(&mut self) -> ParseResult<Fun> {
+        self.eat(TokenKind::Fn)?;
+        let token = self.peek();
+        self.eat(TokenKind::Ident)?;
+        let name = Ident { start: token.start, end: token.end };
+
+        self.eat(TokenKind::OpenBrace)?;
         let params = vec![];
-        if self.token.kind != TokenKind::CloseBrace { panic!() };
-        self.next();
-        let returns = if self.token.kind != TokenKind::OpenCurlyBrace {
-            Some(self.parse_ty())
+        self.eat(TokenKind::CloseBrace)?;
+        let returns = if self.peek().kind != TokenKind::OpenCurlyBrace {
+            Some(self.parse_ty()?)
         } else {
             None
         };
-        let block = self.parse_block();
-        Fun { block, params, returns, name }
+        let block = self.parse_block()?;
+        Ok(Fun { block, params, returns, name })
     }
-}
-
-#[test]
-fn test_parse_expr() {
-    let mut parser = Parser::new("a * 3 + 2");
-    let expr = parser.parse_expr(Prec::Bracket);
-    assert_eq!(expr, Expr::Binary {
-        left: Box::new(Expr::Binary {
-            left: Box::new(Expr::Ident(Ident { offset: 0 })),
-            op: BinaryOp::Multiply,
-            right: Box::new(Expr::Integer { offset: 4 })
-        }),
-        op: BinaryOp::Add,
-        right: Box::new(Expr::Integer { offset: 8 })
-    });
-}
-
-#[test]
-fn test_parse_bracket() {
-    let mut parser = Parser::new("a * (3 + 2)");
-    let expr = parser.parse_expr(Prec::Bracket);
-    assert_eq!(expr, Expr::Binary {
-        left: Box::new(Expr::Ident(Ident { offset: 0 })),
-        op: BinaryOp::Multiply,
-        right: Box::new(Expr::Binary {
-            left: Box::new(Expr::Integer { offset: 5 }),
-            op: BinaryOp::Add,
-            right: Box::new(Expr::Integer { offset: 9 })
-        }),
-    });
-}
-
-#[test]
-fn test_parse_assign() {
-    let mut parser = Parser::new("x = 2 - 3");
-    let stmt = parser.parse_stmt();
-    assert_eq!(stmt, Some(Stmt::Assign {
-        ident: Ident { offset: 0 },
-        expr: Expr::Binary {
-            left: Box::new(Expr::Integer { offset: 4 }),
-            op: BinaryOp::Subtract,
-            right: Box::new(Expr::Integer { offset: 8 }),
-        }
-    }));
-}
-
-#[test]
-fn test_parse_fn() {
-    let mut parser = Parser::new("fn test() { x = 2 }");
-    let fun = parser.parse_fn();
-    assert_eq!(Token::new(fun.name.offset, TokenKind::Ident).as_str(parser.lexer.src()), "test");
-    assert!(fun.params.is_empty());
-    assert!(fun.returns.is_none());
-    assert_eq!(fun.block.stmts.len(), 1);
 }
