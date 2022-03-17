@@ -7,7 +7,6 @@ mod parser;
 mod compiler;
 mod mir;
 mod mips;
-mod ty;
 
 fn main() {
     let src = include_str!("../example.txt");
