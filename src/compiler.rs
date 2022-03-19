@@ -137,9 +137,6 @@ impl<'a> Compiler<'a> {
     fn lookup_var(&self, name: ast::Ident) -> &Variable {
         self.scope.iter().find(|var| var.name.as_str(self.src) == name.as_str(self.src)).unwrap()
     }
-    // fn new_int_ty(&mut self, int_ty: IntTy) -> TyRef {
-    //     TyRef::known(Ty::Int(IntTyRef::any()))
-    // }
     fn compile_compare_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::CompareOp, if_true: mir::BlockId, if_false: mir::BlockId) -> mir::Branch {
         let (left_expr, left_ty) = self.compile_expr(left);
         let (right_expr, right_ty) = self.compile_expr(right);
@@ -223,8 +220,8 @@ impl<'a> Compiler<'a> {
         match &*ty.infer_ty() {
             InferTy::Any => {
                 let any_ty = TyRef::any();
-                // let ref_ty = TyRef::known_with_args(Ty::Ref, vec![any_ty.clone()]);
-                // unify(&ty, &ref_ty).unwrap();
+                let ref_ty = TyRef::known_with_args(Ty::Ref, vec![any_ty.clone()]);
+                unify(&ty, &ref_ty).unwrap();
                 any_ty
             }
             InferTy::Equal(ty) => self.deref_ty(ty.clone()),
