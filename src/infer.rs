@@ -1,10 +1,10 @@
-use std::{rc::Rc, cell::RefCell};
+use std::{rc::Rc, cell::{RefCell, Ref}, fmt};
 
 #[derive(Debug, Clone)]
-pub struct InferTyRef<T: PartialEq + Clone>(Rc<RefCell<InferTy<T>>>);
+pub struct InferTyRef<T: Unify + Clone + fmt::Debug>(Rc<RefCell<InferTy<T>>>);
 
 #[derive(Debug, Clone)]
-pub enum InferTy<T: PartialEq + Clone> {
+pub enum InferTy<T: Unify + Clone + fmt::Debug> {
     Any,
     Equal(InferTyRef<T>),
     Known {
@@ -13,56 +13,82 @@ pub enum InferTy<T: PartialEq + Clone> {
     },
 }
 
-impl<T: PartialEq + Clone> InferTy<T> {
+impl<T: Unify + Clone + fmt::Debug> InferTy<T> {
     pub fn as_ref(self) -> InferTyRef<T> {
         InferTyRef(Rc::new(RefCell::new(self)))
     }
 }
 
-impl<T: PartialEq + Clone> InferTyRef<T> {
+pub trait Unify {
+    fn unify(a: &Self, b: &Self) -> Result<(), ()>;
+}
+
+impl<T: Unify + Clone + fmt::Debug> InferTyRef<T> {
     pub fn any() -> InferTyRef<T> {
         InferTy::Any.as_ref()
     }
-    pub fn known(ty: T, args: Vec<InferTyRef<T>>) -> InferTyRef<T> {
+    pub fn known_with_args(ty: T, args: Vec<InferTyRef<T>>) -> InferTyRef<T> {
         InferTy::Known { ty, args }.as_ref()
     }
-}
-
-impl<T: PartialEq + Clone> PartialEq for InferTyRef<T> {
-    fn eq(&self, other: &Self) -> bool {
-        match unify(self, other, false) {
-            Ok(_) => true,
-            Err(_) => false,
+    pub fn known(ty: T) -> InferTyRef<T> {
+        InferTyRef::known_with_args(ty, vec![])
+    }
+    pub fn infer_ty(&self) -> Ref<'_, InferTy<T>> {
+        self.0.borrow()
+    }
+    pub fn concrete(&self) -> T {
+        match &*self.0.borrow() {
+            InferTy::Any => panic!(),
+            InferTy::Equal(ty) => ty.concrete(),
+            InferTy::Known { ty, .. } => ty.clone(),
         }
     }
 }
 
-pub fn unify<T: PartialEq + Clone>(a: &InferTyRef<T>, b: &InferTyRef<T>, should_unify: bool) -> Result<InferTy<T>, ()> {
-    let unified = match (&*a.0.borrow(), &*b.0.borrow()) {
-        (InferTy::Equal(a), _) => unify(&a, b, should_unify)?,
-        (_, InferTy::Equal(b)) => unify(a, &b, should_unify)?,
+pub fn unify<T: Unify + Clone + fmt::Debug>(a: &InferTyRef<T>, b: &InferTyRef<T>) -> Result<InferTy<T>, ()> {
+    unify_test(a, b)
+}
 
-        (InferTy::Any, InferTy::Any) => InferTy::Equal(InferTyRef::any()),
-        (InferTy::Any, ty) => ty.clone(),
-        (ty, InferTy::Any) => ty.clone(),
+pub fn unify_test<T: Unify + Clone + fmt::Debug>(a: &InferTyRef<T>, b: &InferTyRef<T>) -> Result<InferTy<T>, ()> {
+    if Rc::ptr_eq(&a.0, &b.0) {
+        panic!()
+    };
+    let unified = {
+        let a_ref = a.0.borrow();
+        let b_ref = b.0.borrow();
+        match (&*a_ref, &*b_ref) {
+            (InferTy::Equal(a), _) => {
+                let a = a.clone();
+                drop(a_ref);
+                drop(b_ref);
+                unify_test(&a, b)?
+            }
+            (_, InferTy::Equal(b)) => {
+                let b = b.clone();
+                drop(a_ref);
+                drop(b_ref);
+                unify_test(a, &b)?
+            }
+            
+            (InferTy::Any, InferTy::Any) => InferTy::Equal(InferTyRef::any()),
+            (InferTy::Any, ty) | (ty, InferTy::Any) => ty.clone(),
 
-        (InferTy::Known { ty: ty_a, args: args_a }, InferTy::Known { ty: ty_b, args: args_b }) => {
-            if ty_a != ty_b {
-                panic!()
-            } else if args_a.len() != args_b.len() {
-                panic!()
-            } else {
-                let mut args = vec![];
-                for (arg_a, arg_b) in args_a.iter().zip(args_b) {
-                    args.push(unify(arg_a, arg_b, should_unify)?.as_ref());
+            (InferTy::Known { ty: ty_a, args: args_a }, InferTy::Known { ty: ty_b, args: args_b }) => {
+                if T::unify(&ty_a, &ty_b).is_err() {
+                    panic!()
+                } else if args_a.len() != args_b.len() {
+                    panic!()
+                } else {
+                    let mut args = vec![];
+                    for (arg_a, arg_b) in args_a.iter().zip(args_b) {
+                        args.push(unify_test(arg_a, arg_b)?.as_ref());
+                    }
+                    InferTy::Known { ty: ty_a.clone(), args }
                 }
-                InferTy::Known { ty: ty_a.clone(), args }
             }
         }
     };
-    if should_unify {
-        *a.0.borrow_mut() = unified.clone();
-        *b.0.borrow_mut() = unified.clone();
-    }
+    *a.0.borrow_mut() = unified.clone();
+    *b.0.borrow_mut() = unified.clone();
     Ok(unified)
 }

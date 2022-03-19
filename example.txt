@@ -1,6 +1,6 @@
 fn test() i32 {
     let a = 3;
-    let b = &a;
-    *b = 9;
-    return *b;
+    let x = &a;
+    *x = 9;
+    return *x;
 }

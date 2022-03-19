@@ -1,54 +1,9 @@
+use crate::ty::{TyRef, IntTyRef};
+
 #[derive(Debug, Clone)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
     pub branch: Branch,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct IntTyName(usize);
-
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct TyName(usize);
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Int {
-    pub size: Size,
-    pub signedness: Signedness,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Size {
-    B8, B16, B32
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Signedness {
-    Signed, Unsigned
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Ty {
-    Any,
-    Equal(TyName),
-    Bool,
-    Ref(TyName),
-    None,
-    Int(IntTyName),
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum IntTy {
-    Any,
-    Equal(IntTyName),
-    Int(Int),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ConcreteTy {
-    None,
-    Bool,
-    Int(Int),
-    Ref(Box<ConcreteTy>),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -81,13 +36,11 @@ pub enum CompareOp {
 #[derive(Debug, Clone)]
 pub struct Fun {
     blocks: Vec<Block>,
-    tys: Vec<Ty>,
-    int_tys: Vec<IntTy>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Alloc(TyName),
+    Alloc(TyRef),
     Drop,
     Return(Expr),
     Assign {
@@ -106,7 +59,7 @@ pub enum Assign {
 pub enum Expr {
     Int {
         value: u32,
-        ty: IntTyName,
+        ty: IntTyRef,
     },
     Binary {
         left: Box<Expr>,
@@ -116,12 +69,12 @@ pub enum Expr {
     Bool(bool),
     Load {
         stack_slot: u32,
-        ty: TyName,
+        ty: TyRef,
     },
     Ref(u32),
     Deref {
         expr: Box<Expr>,
-        ty: TyName,
+        ty: TyRef,
     },
 }
 
@@ -144,32 +97,9 @@ impl BlockId {
     }
 }
 
-impl Ty {
-    pub fn concrete(&self, fun: &Fun) -> ConcreteTy {
-        match self {
-            Ty::Bool => ConcreteTy::Bool,
-            Ty::None => ConcreteTy::None,
-            Ty::Int(name) => ConcreteTy::Int(fun.get_int_ty(*name).concrete(fun)),
-            Ty::Equal(name) => fun.get_ty(*name).concrete(fun),
-            Ty::Ref(ty) => ConcreteTy::Ref(Box::new(fun.get_ty(*ty).concrete(fun))),
-            Ty::Any => panic!(),
-        }
-    }
-}
-
-impl IntTy {
-    pub fn concrete(&self, fun: &Fun) -> Int {
-        match self {
-            IntTy::Any => Int { size: Size::B32, signedness: Signedness::Signed },
-            IntTy::Int(int) => *int,
-            IntTy::Equal(name) => fun.get_int_ty(*name).concrete(fun),
-        }
-    }
-}
-
 impl Fun {
     pub fn new() -> Fun {
-        Fun { blocks: vec![], tys: vec![], int_tys: vec![] }
+        Fun { blocks: vec![] }
     }
     pub fn new_block(&mut self) -> BlockId {
         let id = BlockId(self.blocks.len() as u32);
@@ -184,28 +114,6 @@ impl Fun {
     }
     pub fn blocks(&self) -> BlockIdIter {
         BlockIdIter { index: 0, len: self.blocks.len() as u32 }
-    }
-    pub fn new_int_ty_name(&mut self, ty: IntTy) -> IntTyName {
-        let ty_name = IntTyName(self.int_tys.len());
-        self.int_tys.push(ty);
-        ty_name
-    }
-    pub fn new_ty_name(&mut self, ty: Ty) -> TyName {
-        let ty_name = TyName(self.tys.len());
-        self.tys.push(ty);
-        ty_name
-    }
-    pub fn get_int_ty(&self, name: IntTyName) -> &IntTy {
-        &self.int_tys[name.0]
-    }
-    pub fn assign_int_ty(&mut self, name: IntTyName, ty: IntTy) {
-        self.int_tys[name.0] = ty
-    }
-    pub fn get_ty(&self, name: TyName) -> &Ty {
-        &self.tys[name.0]
-    }
-    pub fn assign_ty(&mut self, name: TyName, ty: Ty) {
-        self.tys[name.0] = ty
     }
 }
 
