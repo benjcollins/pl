@@ -1,3 +1,5 @@
+use crate::token::{Token, TokenKind};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Ident {
     pub start: usize,
@@ -5,8 +7,15 @@ pub struct Ident {
 }
 
 impl Ident {
+    pub fn new(token: Token) -> Ident {
+        assert_eq!(token.kind, TokenKind::Ident);
+        Ident { start: token.start, end: token.end }
+    }
     pub fn as_str<'src>(&self, src: &'src str) -> &'src str {
         &src[self.start..self.end]
+    }
+    pub fn eq(&self, other: Ident, src: &str) -> bool {
+        self.as_str(src) == other.as_str(src)
     }
 }
 
@@ -89,8 +98,14 @@ pub struct Block {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Param {
+    pub name: Ident,
+    pub ty: Ty,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Fun {
-    pub params: Vec<(Ident, Ty)>,
+    pub params: Vec<Param>,
     pub returns: Option<Ty>,
     pub block: Block,
     pub name: Ident,

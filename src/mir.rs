@@ -11,26 +11,13 @@ pub struct BlockId(u32);
 
 #[derive(Debug, Clone)]
 pub enum Branch {
-    End,
+    Return(Option<Expr>),
     Static(BlockId),
-    Bool {
+    Condition {
         expr: Expr,
         if_true: BlockId,
         if_false: BlockId,
     },
-    Compare {
-        a: Expr,
-        b: Expr,
-        cmp: CompareOp,
-        if_true: BlockId,
-        if_false: BlockId,
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum CompareOp {
-    LessThan,
-    GreaterThan,
 }
 
 #[derive(Debug, Clone)]
@@ -41,8 +28,6 @@ pub struct Fun {
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Alloc(TyRef),
-    Drop,
-    Return(Expr),
     Assign {
         assign: Assign,
         expr: Expr,
@@ -84,6 +69,8 @@ pub enum BinaryOp {
     Subtract,
     Multiply,
     Divide,
+    LessThan,
+    GreaterThan,
 }
 
 pub struct BlockIdIter {
@@ -103,7 +90,7 @@ impl Fun {
     }
     pub fn new_block(&mut self) -> BlockId {
         let id = BlockId(self.blocks.len() as u32);
-        self.blocks.push(Block { stmts: vec![], branch: Branch::End });
+        self.blocks.push(Block { stmts: vec![], branch: Branch::Return(None) });
         id
     }
     pub fn get_block_mut(&mut self, id: BlockId) -> &mut Block {

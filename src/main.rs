@@ -1,4 +1,4 @@
-use std::{fs, process::Command};
+use std::{fs::File, process::Command};
 
 mod token;
 mod lexer;
@@ -8,7 +8,7 @@ mod ty;
 mod infer;
 mod compiler;
 mod mir;
-mod mips;
+mod qbe;
 
 fn main() {
     let src = include_str!("../example.txt");
@@ -16,9 +16,9 @@ fn main() {
     let fun_ast = parser::parse(&tokens).unwrap();
     let fun_mir = compiler::compile_fun(&fun_ast, src);
 
-    let mut pre = include_str!("../pre.a").to_string();
-    let asm = mips::compile_fun(&fun_mir);
-    pre.push_str(&asm);
-    fs::write("output.a", pre).unwrap();
-    Command::new("spim").arg("-f").arg("output.a").status().unwrap();
+    let file = File::create("output.ssa").unwrap();
+    qbe::compile_fun(&fun_mir, file).unwrap();
+    Command::new("qbe/obj/qbe").args(["output.ssa", "-o", "output.S"]).status().unwrap();
+    Command::new("gcc").args(["-o", "output", "main.c", "output.S"]).status().unwrap();
+    Command::new("./output").status().unwrap();
 }

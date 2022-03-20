@@ -13,22 +13,16 @@ pub enum InferTy<T: Unify + Clone + fmt::Debug> {
     },
 }
 
-impl<T: Unify + Clone + fmt::Debug> InferTy<T> {
-    pub fn as_ref(self) -> InferTyRef<T> {
-        InferTyRef(Rc::new(RefCell::new(self)))
-    }
-}
-
 pub trait Unify {
     fn unify(a: &Self, b: &Self) -> Result<(), ()>;
 }
 
 impl<T: Unify + Clone + fmt::Debug> InferTyRef<T> {
     pub fn any() -> InferTyRef<T> {
-        InferTy::Any.as_ref()
+        InferTyRef(Rc::new(RefCell::new(InferTy::Any)))
     }
     pub fn known_with_args(ty: T, args: Vec<InferTyRef<T>>) -> InferTyRef<T> {
-        InferTy::Known { ty, args }.as_ref()
+        InferTyRef(Rc::new(RefCell::new(InferTy::Known { ty, args })))
     }
     pub fn known(ty: T) -> InferTyRef<T> {
         InferTyRef::known_with_args(ty, vec![])
@@ -46,12 +40,8 @@ impl<T: Unify + Clone + fmt::Debug> InferTyRef<T> {
 }
 
 pub fn unify<T: Unify + Clone + fmt::Debug>(a: &InferTyRef<T>, b: &InferTyRef<T>) -> Result<InferTy<T>, ()> {
-    unify_test(a, b)
-}
-
-pub fn unify_test<T: Unify + Clone + fmt::Debug>(a: &InferTyRef<T>, b: &InferTyRef<T>) -> Result<InferTy<T>, ()> {
     if Rc::ptr_eq(&a.0, &b.0) {
-        panic!()
+        return Ok(a.0.borrow().clone())
     };
     let unified = {
         let a_ref = a.0.borrow();
@@ -61,13 +51,13 @@ pub fn unify_test<T: Unify + Clone + fmt::Debug>(a: &InferTyRef<T>, b: &InferTyR
                 let a = a.clone();
                 drop(a_ref);
                 drop(b_ref);
-                unify_test(&a, b)?
+                unify(&a, b)?
             }
             (_, InferTy::Equal(b)) => {
                 let b = b.clone();
                 drop(a_ref);
                 drop(b_ref);
-                unify_test(a, &b)?
+                unify(a, &b)?
             }
             
             (InferTy::Any, InferTy::Any) => InferTy::Equal(InferTyRef::any()),
@@ -81,7 +71,7 @@ pub fn unify_test<T: Unify + Clone + fmt::Debug>(a: &InferTyRef<T>, b: &InferTyR
                 } else {
                     let mut args = vec![];
                     for (arg_a, arg_b) in args_a.iter().zip(args_b) {
-                        args.push(unify_test(arg_a, arg_b)?.as_ref());
+                        args.push(InferTyRef(Rc::new(RefCell::new(unify(arg_a, arg_b)?))));
                     }
                     InferTy::Known { ty: ty_a.clone(), args }
                 }

@@ -1,3 +1,6 @@
 /target
 lcov.info
 output.a
+output
+output.S
+output.ssa

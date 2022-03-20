@@ -1,4 +1,4 @@
-use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Ident, Stmt, Else, If, Block, Ty, Fun, PrefixOp, Assign}};
+use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Ident, Stmt, Else, If, Block, Ty, Fun, PrefixOp, Assign, Param}};
 
 pub fn parse(tokens: &[Token]) -> ParseResult<Fun> {
     let mut parser = Parser {
@@ -146,7 +146,7 @@ impl<'a> Parser<'a> {
                 let body = self.parse_block()?;
                 Stmt::While { cond, body }
             }
-            TokenKind::Let => {
+            TokenKind::Var => {
                 self.next();
                 let token = self.peek();
                 self.eat(TokenKind::Ident)?;
@@ -213,7 +213,19 @@ impl<'a> Parser<'a> {
         let name = Ident { start: token.start, end: token.end };
 
         self.eat(TokenKind::OpenBrace)?;
-        let params = vec![];
+        let mut params = vec![];
+        if self.peek().kind != TokenKind::CloseBrace {
+            loop {
+                let token = self.peek();
+                self.eat(TokenKind::Ident)?;
+                let name = Ident::new(token);
+                self.eat(TokenKind::Colon)?;
+                let ty = self.parse_ty()?;
+                params.push(Param { name, ty });
+                if self.peek().kind != TokenKind::Comma { break }
+                self.next();
+            }
+        }
         self.eat(TokenKind::CloseBrace)?;
         let returns = if self.peek().kind != TokenKind::OpenCurlyBrace {
             Some(self.parse_ty()?)

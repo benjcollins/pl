@@ -23,7 +23,7 @@ pub fn lex<'a>(src: &'a str) -> Vec<Token> {
                 lexer.next_while(|ch| ch.is_alphanumeric());
                 let content = &lexer.src[offset..lexer.offset];
                 let kind = match content {
-                    "let" => TokenKind::Let,
+                    "var" => TokenKind::Var,
                     "fn" => TokenKind::Fn,
                     "return" => TokenKind::Return,
                     "true" => TokenKind::True,

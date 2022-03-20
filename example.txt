@@ -1,6 +1,11 @@
-fn test() i32 {
-    let a = 3;
-    let x = &a;
-    *x = 9;
-    return *x;
+fn test(n: i32) i32 {
+    var a = 1;
+    var b = 1;
+    while a < n {
+        var c = a;
+        a = a + b;
+        b = a;
+        n = n + 1;
+    }
+    return a;
 }

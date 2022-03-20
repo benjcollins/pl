@@ -23,7 +23,7 @@ pub enum TokenKind {
     Semicolon,
     Ampersand,
 
-    Let,
+    Var,
     Fn,
     Return,
     If,
