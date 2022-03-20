@@ -189,9 +189,9 @@ impl<'a> Parser<'a> {
     }
     fn parse_ty(&mut self) -> ParseResult<Ty> {
         Ok(match self.peek().kind {
-            TokenKind::Asterisk => {
+            TokenKind::Ampersand => {
                 self.next();
-                Ty::Pointer(Box::new(self.parse_ty()?))
+                Ty::Ref(Box::new(self.parse_ty()?))
             }
             TokenKind::Ident => {
                 let name = Ident { start: self.peek().start, end: self.peek().end };

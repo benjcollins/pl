@@ -27,7 +27,7 @@ pub struct Fun<'a> {
     pub name: &'a str,
     pub is_extern: bool,
     pub params: Vec<TyRef>,
-    pub returns: TyRef,
+    pub returns: Option<TyRef>,
     blocks: Vec<Block>,
 }
 
@@ -91,7 +91,7 @@ impl BlockId {
 }
 
 impl<'a> Fun<'a> {
-    pub fn new(params: Vec<TyRef>, is_extern: bool, name: &'a str, returns: TyRef) -> Fun<'a> {
+    pub fn new(params: Vec<TyRef>, is_extern: bool, name: &'a str, returns: Option<TyRef>) -> Fun<'a> {
         Fun { blocks: vec![], params, is_extern, name, returns }
     }
     pub fn new_block(&mut self) -> BlockId {
@@ -126,7 +126,11 @@ impl Iterator for BlockIdIter {
 
 impl<'a> fmt::Display for Fun<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "fn {}() {}", self.name, TyOption(self.returns.concrete()))?;
+        writeln!(f, "fn {}()", self.name)?;
+        if let Some(ty) = &self.returns {
+            write!(f, " {}", TyOption(ty.concrete()))?;
+        }
+        writeln!(f, "")?;
         for block in self.blocks() {
             writeln!(f, "b{}:", block.id())?;
             write!(f, "{}", self.get_block(block))?;

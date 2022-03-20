@@ -22,13 +22,11 @@ enum Value {
     },
     Pointer(Temp),
     Bool(Temp),
-    None,
 }
 
 fn size_bytes(ty: &TyRef) -> u32 {
     match ty.concrete().unwrap() {
         Ty::Bool => 1,
-        Ty::None => 0,
         Ty::Int(int_ty) => match int_ty.concrete().unwrap().size {
             Size::B8 => 1,
             Size::B16 => 2,
@@ -41,13 +39,20 @@ fn size_bytes(ty: &TyRef) -> u32 {
 fn align_bytes(ty: &TyRef) -> u32 {
     match ty.concrete().unwrap() {
         Ty::Bool => 1,
-        Ty::None => 0,
         Ty::Int(int_ty) => match int_ty.concrete().unwrap().size {
             Size::B8 => 1,
             Size::B16 => 2,
             Size::B32 => 4,
         }
         Ty::Ref(_) => 8,
+    }
+}
+
+fn ty_name(ty: &TyRef) -> &str {
+    match ty.concrete().unwrap() {
+        Ty::Bool => "w",
+        Ty::Ref(_) => "l",
+        Ty::Int(_) => "w",
     }
 }
 
@@ -76,23 +81,24 @@ pub fn compile_fun<W: Write>(fun: &Fun, output: W) -> io::Result<()> {
         fun,
         output,
     };
-    let mut params = vec![];
-    for param in &fun.params {
-        match param.concrete().unwrap() {
-            Ty::Bool => params.push(("w", compiler.new_temp(), param)),
-            Ty::None => {}
-            Ty::Ref(_) => params.push(("l", compiler.new_temp(), param)),
-            Ty::Int(_) => params.push(("w", compiler.new_temp(), param)),
+    let params: Vec<_> = fun.params.iter().map(|param| (compiler.new_temp(), param)).collect();
+    if fun.is_extern {
+        write!(compiler.output, "export ")?;
+    }
+    write!(compiler.output, "function {} ${}(", fun.returns.as_ref().map_or("", |ty| ty_name(ty)), fun.name)?;
+    let mut param_iter = params.iter();
+    if let Some((temp, ty)) = param_iter.next() {
+        write!(compiler.output, "{} {}", ty_name(ty), temp)?;
+        for (temp, ty) in param_iter {
+            write!(compiler.output, ", {} {}", ty_name(ty), temp)?;
         }
     }
-    let stuff = params.iter().map(|(ty, temp, _)| format!("{} {}", ty, temp)).collect::<Vec<_>>().join(", ");
-    writeln!(compiler.output, "{}function w ${}({}) {{", if fun.is_extern { "export "  } else { "" }, fun.name, stuff)?;
+    writeln!(compiler.output, ") {{")?;
     writeln!(compiler.output, "@start")?;
-    for (_, temp, ty) in &params {
+    for (temp, ty) in &params {
         let addr = compiler.alloc_ty(ty)?;
         match ty.concrete().unwrap() {
             Ty::Bool => compiler.store(Value::Bool(*temp), addr)?,
-            Ty::None => (),
             Ty::Ref(_) => compiler.store(Value::Pointer(*temp), addr)?,
             Ty::Int(ty) => compiler.store(Value::Int { temp: *temp, ty: ty.concrete().unwrap() }, addr)?,
         }
@@ -117,7 +123,6 @@ impl<'f, W: Write> Compiler<'f, W> {
                     Some(expr) => {
                         let value = self.compile_expr(expr)?;
                         match value {
-                            Value::None => writeln!(self.output, "  ret")?,
                             Value::Bool(temp) | Value::Int { temp, .. } | Value::Pointer(temp) => {
                                 writeln!(self.output, "  ret {}", temp)?;
                             }
@@ -254,7 +259,6 @@ impl<'f, W: Write> Compiler<'f, W> {
             Value::Pointer(temp) => {
                 writeln!(self.output, "  storew {}, {}", temp, addr)?;
             }
-            Value::None => panic!(),
         }
         Ok(())
     }
@@ -284,7 +288,6 @@ impl<'f, W: Write> Compiler<'f, W> {
                 writeln!(self.output, "  {} =l loadl {}", temp, addr)?;
                 Value::Pointer(temp)
             }
-            Ty::None => Value::None,
         })
     }
     fn new_temp(&mut self) -> Temp {

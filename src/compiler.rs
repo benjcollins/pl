@@ -4,7 +4,7 @@ struct Compiler<'a> {
     src: &'a str,
     scope: Vec<Variable>,
     fun: mir::Fun<'a>,
-    returns: TyRef,
+    returns: Option<TyRef>,
 }
 
 #[derive(Debug, Clone)]
@@ -15,10 +15,7 @@ struct Variable {
 }
 
 pub fn compile_fun<'a>(fun: &ast::Fun, src: &'a str) -> mir::Fun<'a> {
-    let returns = match &fun.returns {
-        Some(ty) => compile_ty(&ty, src),
-        None => TyRef::known(Ty::None),
-    };
+    let returns = fun.returns.as_ref().map(|ty| compile_ty(&ty, src));
     let mut scope = vec![];
     let mut params = vec![];
     for param in &fun.params {
@@ -53,7 +50,7 @@ fn compile_ty(ty: &ast::Ty, src: &str) -> TyRef {
 
             _ => panic!(),
         }
-        ast::Ty::Pointer(ty) => TyRef::known(Ty::Ref(compile_ty(ty, src))),
+        ast::Ty::Ref(ty) => TyRef::known(Ty::Ref(compile_ty(ty, src))),
     }
 }
 
@@ -115,7 +112,11 @@ impl<'a> Compiler<'a> {
                 }
                 ast::Stmt::Return { expr } => {
                     let (expr, ty) = self.compile_expr(expr);
-                    unify(&ty, &self.returns).unwrap();
+                    let returns = match &self.returns {
+                        Some(ty) => ty,
+                        None => panic!(),
+                    };
+                    unify(&ty, returns).unwrap();
                     self.fun.get_block_mut(*block_id).branch = mir::Branch::Return(Some(expr));
                     break
                 }

@@ -10,6 +10,6 @@ extern fn fib(n: i32) i32 {
     return a;
 }
 
-extern fn add(a: i32, b: i32) i32 {
-    return a + b;
+extern fn sum(total: &i32, n: i32) {
+    *total = *total + n;
 }

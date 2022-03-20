@@ -8,7 +8,6 @@ pub type IntTyRef = InferTyRef<IntTy>;
 #[derive(Debug, Clone)]
 pub enum Ty {
     Bool,
-    None,
     Ref(TyRef),
     Int(IntTyRef),
 }
@@ -33,7 +32,6 @@ impl Unify for Ty {
     fn unify(a: &Ty, b: &Ty) -> Result<(), ()> {
         match (a, b) {
             (Ty::Bool, Ty::Bool) => (),
-            (Ty::None, Ty::None) => (),
             (Ty::Ref(a), Ty::Ref(b)) => _ = unify(&a, &b)?,
             (Ty::Int(a), Ty::Int(b)) => _ = unify(&a, &b)?,
             _ => Err(())?,
@@ -89,7 +87,6 @@ impl fmt::Display for Ty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Ty::Bool => write!(f, "bool"),
-            Ty::None => write!(f, "none"),
             Ty::Ref(ty) => write!(f, "&{}", TyOption(ty.concrete())),
             Ty::Int(int_ty) => write!(f, "{}", IntTyOption(int_ty.concrete())),
         }

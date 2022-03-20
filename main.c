@@ -1,14 +1,15 @@
 #include <stdio.h>
 
 extern int fib(int n);
-extern int add(int a, int b);
+extern int sum(int *total, int n);
 
 int main() {
-    int total = 0;
+    // int total = 0;
     for (int i = 0; i < 20; i++) {
         int n = fib(i);
         printf("%d\n", n);
-        total = add(total, n);
+        // sum(&total, n);
     }
-    printf("%d\n", total);
+    // sum(&total, 5);
+    // printf("%d\n", total);
 }

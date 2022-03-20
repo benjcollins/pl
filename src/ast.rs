@@ -89,7 +89,7 @@ pub enum Stmt {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ty {
     Name(Ident),
-    Pointer(Box<Ty>),
+    Ref(Box<Ty>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
