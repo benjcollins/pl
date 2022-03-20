@@ -109,4 +109,5 @@ pub struct Fun {
     pub returns: Option<Ty>,
     pub block: Block,
     pub name: Ident,
+    pub is_extern: bool,
 }

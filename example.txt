@@ -1,4 +1,4 @@
-fn test(n: i32) i32 {
+extern fn fib(n: i32) i32 {
     var a = 1;
     var b = 2;
     while n > 0 {
@@ -8,4 +8,8 @@ fn test(n: i32) i32 {
         n = n - 1;
     }
     return a;
+}
+
+extern fn add(a: i32, b: i32) i32 {
+    return a + b;
 }

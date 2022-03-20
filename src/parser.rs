@@ -1,11 +1,15 @@
 use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Ident, Stmt, Else, If, Block, Ty, Fun, PrefixOp, Assign, Param}};
 
-pub fn parse(tokens: &[Token]) -> ParseResult<Fun> {
+pub fn parse(tokens: &[Token]) -> ParseResult<Vec<Fun>> {
     let mut parser = Parser {
         index: 0,
         tokens,
     };
-    parser.parse_fn()
+    let mut fns = vec![];
+    while parser.index < parser.tokens.len() {
+        fns.push(parser.parse_fn()?)
+    }
+    Ok(fns)
 }
 
 struct Parser<'a> {
@@ -207,6 +211,12 @@ impl<'a> Parser<'a> {
         Ok(Block { stmts })
     }
     fn parse_fn(&mut self) -> ParseResult<Fun> {
+        let is_extern = if self.peek().kind == TokenKind::Extern {
+            self.next();
+            true
+        } else {
+            false
+        };
         self.eat(TokenKind::Fn)?;
         let token = self.peek();
         self.eat(TokenKind::Ident)?;
@@ -233,6 +243,6 @@ impl<'a> Parser<'a> {
             None
         };
         let block = self.parse_block()?;
-        Ok(Fun { block, params, returns, name })
+        Ok(Fun { block, params, returns, name, is_extern })
     }
 }

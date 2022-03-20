@@ -3,8 +3,8 @@ use crate::{ast, mir, ty::{TyRef, Ty, IntTyRef, IntTy, Signedness, Size}, infer:
 struct Compiler<'a> {
     src: &'a str,
     scope: Vec<Variable>,
-    fun: mir::Fun,
-    return_ty: TyRef,
+    fun: mir::Fun<'a>,
+    returns: TyRef,
 }
 
 #[derive(Debug, Clone)]
@@ -14,8 +14,8 @@ struct Variable {
     ty: TyRef,
 }
 
-pub fn compile_fun<'a>(fun: &ast::Fun, src: &'a str) -> mir::Fun {
-    let return_ty = match &fun.returns {
+pub fn compile_fun<'a>(fun: &ast::Fun, src: &'a str) -> mir::Fun<'a> {
+    let returns = match &fun.returns {
         Some(ty) => compile_ty(&ty, src),
         None => TyRef::known(Ty::None),
     };
@@ -28,10 +28,10 @@ pub fn compile_fun<'a>(fun: &ast::Fun, src: &'a str) -> mir::Fun {
         scope.push(Variable { name: param.name, ty, stack_slot });
     }
     let mut compiler = Compiler {
-        fun: mir::Fun::new(params),
+        fun: mir::Fun::new(params, fun.is_extern, fun.name.as_str(src), returns.clone()),
         scope,
         src,
-        return_ty,
+        returns,
     };
     let mut block_id = compiler.fun.new_block();
     compiler.compile_block(&fun.block, &mut block_id);
@@ -115,7 +115,7 @@ impl<'a> Compiler<'a> {
                 }
                 ast::Stmt::Return { expr } => {
                     let (expr, ty) = self.compile_expr(expr);
-                    unify(&ty, &self.return_ty).unwrap();
+                    unify(&ty, &self.returns).unwrap();
                     self.fun.get_block_mut(*block_id).branch = mir::Branch::Return(Some(expr));
                     break
                 }

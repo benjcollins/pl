@@ -5,7 +5,7 @@ use crate::{mir::{Fun, BlockId, Branch, Stmt, Expr, Assign, BinaryOp}, ty::{IntT
 struct Compiler<'f, W: Write> {
     stack_slots: Vec<Temp>,
     temp_count: u32,
-    fun: &'f Fun,
+    fun: &'f Fun<'f>,
     output: W,
 }
 
@@ -86,7 +86,7 @@ pub fn compile_fun<W: Write>(fun: &Fun, output: W) -> io::Result<()> {
         }
     }
     let stuff = params.iter().map(|(ty, temp, _)| format!("{} {}", ty, temp)).collect::<Vec<_>>().join(", ");
-    writeln!(compiler.output, "export function w $test({}) {{", stuff)?;
+    writeln!(compiler.output, "{}function w ${}({}) {{", if fun.is_extern { "export "  } else { "" }, fun.name, stuff)?;
     writeln!(compiler.output, "@start")?;
     for (_, temp, ty) in &params {
         let addr = compiler.alloc_ty(ty)?;
@@ -100,7 +100,7 @@ pub fn compile_fun<W: Write>(fun: &Fun, output: W) -> io::Result<()> {
     for block_id in fun.blocks() {
         compiler.compile_block(block_id)?;
     }
-    writeln!(compiler.output, "}}")?;
+    writeln!(compiler.output, "}}\n")?;
     Ok(())
 }
 

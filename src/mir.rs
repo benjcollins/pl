@@ -23,8 +23,11 @@ pub enum Branch {
 }
 
 #[derive(Debug, Clone)]
-pub struct Fun {
+pub struct Fun<'a> {
+    pub name: &'a str,
+    pub is_extern: bool,
     pub params: Vec<TyRef>,
+    pub returns: TyRef,
     blocks: Vec<Block>,
 }
 
@@ -87,9 +90,9 @@ impl BlockId {
     }
 }
 
-impl Fun {
-    pub fn new(params: Vec<TyRef>) -> Fun {
-        Fun { blocks: vec![], params }
+impl<'a> Fun<'a> {
+    pub fn new(params: Vec<TyRef>, is_extern: bool, name: &'a str, returns: TyRef) -> Fun<'a> {
+        Fun { blocks: vec![], params, is_extern, name, returns }
     }
     pub fn new_block(&mut self) -> BlockId {
         let id = BlockId(self.blocks.len() as u32);
@@ -121,8 +124,9 @@ impl Iterator for BlockIdIter {
     }
 }
 
-impl fmt::Display for Fun {
+impl<'a> fmt::Display for Fun<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "fn {}() {}", self.name, TyOption(self.returns.concrete()))?;
         for block in self.blocks() {
             writeln!(f, "b{}:", block.id())?;
             write!(f, "{}", self.get_block(block))?;

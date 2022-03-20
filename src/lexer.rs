@@ -31,6 +31,7 @@ pub fn lex<'a>(src: &'a str) -> Vec<Token> {
                     "if" => TokenKind::If,
                     "else" => TokenKind::Else,
                     "while" => TokenKind::While,
+                    "extern" => TokenKind::Extern,
                     _ => TokenKind::Ident,
                 };
                 lexer.push_token(offset, kind);

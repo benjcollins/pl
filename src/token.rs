@@ -31,6 +31,7 @@ pub enum TokenKind {
     While,
     True,
     False,
+    Extern,
 
     OpenBrace,
     CloseBrace,
