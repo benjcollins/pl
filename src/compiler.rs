@@ -19,9 +19,17 @@ pub fn compile_fun<'a>(fun: &ast::Fun, src: &'a str) -> mir::Fun {
         Some(ty) => compile_ty(&ty, src),
         None => TyRef::known(Ty::None),
     };
+    let mut scope = vec![];
+    let mut params = vec![];
+    for param in &fun.params {
+        let ty = compile_ty(&param.ty, src);
+        let stack_slot = scope.len() as u32;
+        params.push(ty.clone());
+        scope.push(Variable { name: param.name, ty, stack_slot });
+    }
     let mut compiler = Compiler {
-        fun: mir::Fun::new(),
-        scope: vec![],
+        fun: mir::Fun::new(params),
+        scope,
         src,
         return_ty,
     };
@@ -159,7 +167,7 @@ impl<'a> Compiler<'a> {
         }
     }
     fn lookup_var(&self, name: ast::Ident) -> &Variable {
-        self.scope.iter().find(|var| var.name.as_str(self.src) == name.as_str(self.src)).unwrap()
+        self.scope.iter().find(|var| var.name.eq(name, self.src)).unwrap()
     }
     fn compile_expr(&mut self, expr: &ast::Expr) -> (mir::Expr, TyRef) {
         match expr {
@@ -172,15 +180,14 @@ impl<'a> Compiler<'a> {
                 (mir::Expr::Bool(*value), TyRef::known(Ty::Bool))
             }
             ast::Expr::Infix { left, right, op } => {
-                let int_ty = TyRef::known(Ty::Int(IntTyRef::any()));
                 match op {
-                    ast::InfixOp::Add => self.compile_binary_expr(left, right, mir::BinaryOp::Add, int_ty.clone(), int_ty),
-                    ast::InfixOp::Subtract => self.compile_binary_expr(left, right, mir::BinaryOp::Subtract, int_ty.clone(), int_ty),
-                    ast::InfixOp::Multiply => self.compile_binary_expr(left, right, mir::BinaryOp::Multiply, int_ty.clone(), int_ty),
-                    ast::InfixOp::Divide => self.compile_binary_expr(left, right, mir::BinaryOp::Divide, int_ty.clone(), int_ty),
+                    ast::InfixOp::Add => self.compile_arth_expr(left, right, mir::BinaryOp::Add),
+                    ast::InfixOp::Subtract => self.compile_arth_expr(left, right, mir::BinaryOp::Subtract),
+                    ast::InfixOp::Multiply => self.compile_arth_expr(left, right, mir::BinaryOp::Multiply),
+                    ast::InfixOp::Divide => self.compile_arth_expr(left, right, mir::BinaryOp::Divide),
 
-                    ast::InfixOp::LessThan => self.compile_binary_expr(left, right, mir::BinaryOp::LessThan, int_ty, TyRef::known(Ty::Bool)),
-                    ast::InfixOp::GreaterThan => self.compile_binary_expr(left, right, mir::BinaryOp::GreaterThan, int_ty, TyRef::known(Ty::Bool)),
+                    ast::InfixOp::LessThan => self.compile_cmp_expr(left, right, mir::BinaryOp::LessThan),
+                    ast::InfixOp::GreaterThan => self.compile_cmp_expr(left, right, mir::BinaryOp::GreaterThan),
                 }
             }
             ast::Expr::Ident(ident) => {
@@ -206,15 +213,29 @@ impl<'a> Compiler<'a> {
             }
         }
     }
-    fn compile_binary_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::BinaryOp, arg: TyRef, ret: TyRef) -> (mir::Expr, TyRef) {
+    fn compile_arth_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::BinaryOp) -> (mir::Expr, TyRef) {
         let (left_expr, left_ty) = self.compile_expr(left);
         let (right_expr, right_ty) = self.compile_expr(right);
-        unify(&arg, &left_ty).unwrap();
-        unify(&arg, &right_ty).unwrap();
+        let int_ty = TyRef::known(Ty::Int(IntTyRef::any()));
+        unify(&int_ty, &left_ty).unwrap();
+        unify(&int_ty, &right_ty).unwrap();
         (mir::Expr::Binary {
             left: Box::new(left_expr),
             right: Box::new(right_expr),
             op,
-        }, ret)
+        }, int_ty)
+    }
+    fn compile_cmp_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::BinaryOp) -> (mir::Expr, TyRef) {
+        let (left_expr, left_ty) = self.compile_expr(left);
+        let (right_expr, right_ty) = self.compile_expr(right);
+        let int_ty = TyRef::known(Ty::Int(IntTyRef::any()));
+        let bool_ty = TyRef::known(Ty::Bool);
+        unify(&int_ty, &left_ty).unwrap();
+        unify(&int_ty, &right_ty).unwrap();
+        (mir::Expr::Binary {
+            left: Box::new(left_expr),
+            right: Box::new(right_expr),
+            op,
+        }, bool_ty)
     }
 }

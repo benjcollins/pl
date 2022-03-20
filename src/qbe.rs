@@ -76,7 +76,27 @@ pub fn compile_fun<W: Write>(fun: &Fun, output: W) -> io::Result<()> {
         fun,
         output,
     };
-    writeln!(compiler.output, "export function w $test() {{")?;
+    let mut params = vec![];
+    for param in &fun.params {
+        match param.concrete() {
+            Ty::Bool => params.push(("w", compiler.new_temp(), param)),
+            Ty::None => {}
+            Ty::Ref => params.push(("l", compiler.new_temp(), param)),
+            Ty::Int(_) => params.push(("w", compiler.new_temp(), param)),
+        }
+    }
+    let stuff = params.iter().map(|(ty, temp, _)| format!("{} {}", ty, temp)).collect::<Vec<_>>().join(", ");
+    writeln!(compiler.output, "export function w $test({}) {{", stuff)?;
+    writeln!(compiler.output, "@start")?;
+    for (_, temp, ty) in &params {
+        let addr = compiler.alloc_ty(ty)?;
+        match ty.concrete() {
+            Ty::Bool => compiler.store(Value::Bool(*temp), addr)?,
+            Ty::None => (),
+            Ty::Ref => compiler.store(Value::Pointer(*temp), addr)?,
+            Ty::Int(ty) => compiler.store(Value::Int { temp: *temp, ty: ty.concrete() }, addr)?,
+        }
+    }
     for block_id in fun.blocks() {
         compiler.compile_block(block_id)?;
     }
@@ -105,7 +125,6 @@ impl<'f, W: Write> Compiler<'f, W> {
                     }
                     None => writeln!(self.output, "  ret")?,
                 }
-                
             }
             Branch::Static(target) => writeln!(self.output, "  jmp {}", Label::from_block(*target))?,
             Branch::Condition { expr, if_true, if_false } => {
@@ -119,19 +138,21 @@ impl<'f, W: Write> Compiler<'f, W> {
         };
         Ok(())
     }
+    fn alloc_ty(&mut self, ty: &TyRef) -> io::Result<Temp> {
+        let align = match align_bytes(ty) {
+            0..=4 => "4",
+            5..=8 => "8",
+            9..=16 => "16",
+            _ => panic!(),
+        };
+        let temp = self.new_temp();
+        self.stack_slots.push(temp);
+        writeln!(self.output, "  {} =l alloc{} {}", temp, align, size_bytes(ty))?;
+        Ok(temp)
+    }
     fn compile_stmt(&mut self, stmt: &Stmt) -> io::Result<()> {
         match stmt {
-            Stmt::Alloc(ty) => {
-                let align = match align_bytes(ty) {
-                    0..=4 => "4",
-                    5..=8 => "8",
-                    9..=16 => "16",
-                    _ => panic!(),
-                };
-                let temp = self.new_temp();
-                self.stack_slots.push(temp);
-                writeln!(self.output, "  {} =l alloc{} {}", temp, align, size_bytes(ty))?;
-            }
+            Stmt::Alloc(ty) => _ = self.alloc_ty(ty)?,
             Stmt::Assign { assign, expr } => {
                 let value = self.compile_expr(expr)?;
                 let temp = self.compile_assign(assign)?;

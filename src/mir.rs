@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::ty::{TyRef, IntTyRef};
 
 #[derive(Debug, Clone)]
@@ -22,6 +24,7 @@ pub enum Branch {
 
 #[derive(Debug, Clone)]
 pub struct Fun {
+    pub params: Vec<TyRef>,
     blocks: Vec<Block>,
 }
 
@@ -85,8 +88,8 @@ impl BlockId {
 }
 
 impl Fun {
-    pub fn new() -> Fun {
-        Fun { blocks: vec![] }
+    pub fn new(params: Vec<TyRef>) -> Fun {
+        Fun { blocks: vec![], params }
     }
     pub fn new_block(&mut self) -> BlockId {
         let id = BlockId(self.blocks.len() as u32);
@@ -115,5 +118,68 @@ impl Iterator for BlockIdIter {
         } else {
             None
         }
+    }
+}
+
+impl fmt::Display for Fun {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for block in self.blocks() {
+            writeln!(f, "b{}:", block.id())?;
+            write!(f, "{}", self.get_block(block))?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for Block {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for stmt in &self.stmts {
+            writeln!(f, "  {}", stmt)?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for Stmt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Stmt::Alloc(ty) => write!(f, "alloc {}", ty),
+            Stmt::Assign { assign, expr } => write!(f, "{} = {}", assign, expr),
+        }
+    }
+}
+
+impl fmt::Display for Assign {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Assign::Deref(assign) => write!(f, "*{}", assign),
+            Assign::Stack(stack_slot) => write!(f, "${}", stack_slot),
+        }
+    }
+}
+
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Expr::Int { value, ty } => write!(f, "{}{}", value, ty),
+            Expr::Binary { left, right, op } => write!(f, "({} {} {})", left, op, right),
+            Expr::Bool(value) => write!(f, "{}", if *value { "true" } else { "false" }),
+            Expr::Load { stack_slot, ty } => write!(f, "${}:{}", stack_slot, ty),
+            Expr::Ref(stack_slot) => write!(f, "&${}", stack_slot),
+            Expr::Deref { expr, ty } => write!(f, "*({}) {}", ty, expr),
+        }
+    }
+}
+
+impl fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            BinaryOp::Add => "+",
+            BinaryOp::Subtract => "-",
+            BinaryOp::Multiply => "*",
+            BinaryOp::Divide => "/",
+            BinaryOp::LessThan => "<",
+            BinaryOp::GreaterThan => ">",
+        })
     }
 }
