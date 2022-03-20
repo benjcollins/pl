@@ -1,4 +1,4 @@
-use std::{rc::Rc, cell::{RefCell, Ref}, fmt};
+use std::{rc::Rc, cell::{RefCell, Ref}};
 
 #[derive(Debug, Clone)]
 pub struct InferTyRef<T: Unify + Clone>(Rc<RefCell<InferTy<T>>>);
@@ -7,10 +7,7 @@ pub struct InferTyRef<T: Unify + Clone>(Rc<RefCell<InferTy<T>>>);
 pub enum InferTy<T: Unify + Clone> {
     Any,
     Equal(InferTyRef<T>),
-    Known {
-        ty: T,
-        args: Vec<InferTyRef<T>>,
-    },
+    Known(T),
 }
 
 pub trait Unify {
@@ -21,20 +18,17 @@ impl<T: Unify + Clone> InferTyRef<T> {
     pub fn any() -> InferTyRef<T> {
         InferTyRef(Rc::new(RefCell::new(InferTy::Any)))
     }
-    pub fn known_with_args(ty: T, args: Vec<InferTyRef<T>>) -> InferTyRef<T> {
-        InferTyRef(Rc::new(RefCell::new(InferTy::Known { ty, args })))
-    }
     pub fn known(ty: T) -> InferTyRef<T> {
-        InferTyRef::known_with_args(ty, vec![])
+        InferTyRef(Rc::new(RefCell::new(InferTy::Known(ty))))
     }
     pub fn infer_ty(&self) -> Ref<'_, InferTy<T>> {
         self.0.borrow()
     }
-    pub fn concrete(&self) -> T {
+    pub fn concrete(&self) -> Option<T> {
         match &*self.0.borrow() {
-            InferTy::Any => panic!(),
+            InferTy::Any => None,
             InferTy::Equal(ty) => ty.concrete(),
-            InferTy::Known { ty, .. } => ty.clone(),
+            InferTy::Known(ty) => Some(ty.clone()),
         }
     }
 }
@@ -63,17 +57,9 @@ pub fn unify<T: Unify + Clone>(a: &InferTyRef<T>, b: &InferTyRef<T>) -> Result<I
             (InferTy::Any, InferTy::Any) => InferTy::Equal(InferTyRef::any()),
             (InferTy::Any, ty) | (ty, InferTy::Any) => ty.clone(),
 
-            (InferTy::Known { ty: ty_a, args: args_a }, InferTy::Known { ty: ty_b, args: args_b }) => {
-                T::unify(&ty_a, &ty_b)?;
-                if args_a.len() != args_b.len() {
-                    Err(())?
-                } else {
-                    let mut args = vec![];
-                    for (arg_a, arg_b) in args_a.iter().zip(args_b) {
-                        args.push(InferTyRef(Rc::new(RefCell::new(unify(arg_a, arg_b)?))));
-                    }
-                    InferTy::Known { ty: ty_a.clone(), args }
-                }
+            (InferTy::Known(a), InferTy::Known(b)) => {
+                T::unify(&a, &b)?;
+                InferTy::Known(a.clone())
             }
         }
     };
@@ -82,22 +68,12 @@ pub fn unify<T: Unify + Clone>(a: &InferTyRef<T>, b: &InferTyRef<T>) -> Result<I
     Ok(unified)
 }
 
-impl<T: fmt::Display + Unify + Clone + fmt::Debug> fmt::Display for InferTyRef<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &*self.0.borrow() {
-            InferTy::Any => write!(f, "ANY"),
-            InferTy::Equal(ty) => write!(f, "EQUAL({})", ty),
-            InferTy::Known { ty, args } => {
-                write!(f, "{}[", ty)?;
-                let mut arg_iter = args.iter();
-                if let Some(arg) = arg_iter.next() {
-                    write!(f, "{}", arg)?;
-                    for arg in arg_iter {
-                        write!(f, ", {}", arg)?;
-                    }
-                }
-                write!(f, "]")
-            }
-        }
-    }
-}
+// impl<T: fmt::Display + Unify + Clone + fmt::Debug> fmt::Display for InferTyRef<T> {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         match &*self.0.borrow() {
+//             InferTy::Any => write!(f, "ANY"),
+//             InferTy::Equal(ty) => write!(f, "EQUAL({})", ty),
+//             InferTy::Known(ty) => write!(f, "{}", ty),
+//         }
+//     }
+// }

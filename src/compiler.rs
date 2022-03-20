@@ -53,20 +53,20 @@ fn compile_ty(ty: &ast::Ty, src: &str) -> TyRef {
 
             _ => panic!(),
         }
-        ast::Ty::Pointer(ty) => TyRef::known_with_args(Ty::Ref, vec![compile_ty(ty, src)]),
+        ast::Ty::Pointer(ty) => TyRef::known(Ty::Ref(compile_ty(ty, src))),
     }
 }
 
-fn deref_ty(ty: TyRef) -> TyRef {
+fn deref_ty(ty: &TyRef) -> TyRef {
     match &*ty.infer_ty() {
         InferTy::Any => {
             let any_ty = TyRef::any();
-            let ref_ty = TyRef::known_with_args(Ty::Ref, vec![any_ty.clone()]);
+            let ref_ty = TyRef::known(Ty::Ref(any_ty.clone()));
             unify(&ty, &ref_ty).unwrap();
             any_ty
         }
-        InferTy::Equal(ty) => deref_ty(ty.clone()),
-        InferTy::Known { ty: Ty::Ref, args } => args[0].clone(),
+        InferTy::Equal(ty) => deref_ty(ty),
+        InferTy::Known(Ty::Ref(ty)) => ty.clone(),
         _ => panic!(),
     }
 }
@@ -127,7 +127,7 @@ impl<'a> Compiler<'a> {
         match assign {
             ast::Assign::Deref(assign) => {
                 let (assign, ty) = self.compile_assign(assign);
-                (mir::Assign::Deref(Box::new(assign)), deref_ty(ty))
+                (mir::Assign::Deref(Box::new(assign)), deref_ty(&ty))
             }
             ast::Assign::Name(name) => {
                 let var = self.lookup_var(*name);
@@ -200,13 +200,13 @@ impl<'a> Compiler<'a> {
             ast::Expr::Prefix { op, expr } => match op {
                 ast::PrefixOp::Deref => {
                     let (expr, ty) = self.compile_expr(expr);
-                    let ty = deref_ty(ty);
+                    let ty = deref_ty(&ty);
                     (mir::Expr::Deref { expr: Box::new(expr), ty: ty.clone() }, ty)
                 }
                 ast::PrefixOp::Ref => match &**expr {
                     ast::Expr::Ident(name) => {
                         let var = self.lookup_var(*name);
-                        (mir::Expr::Ref(var.stack_slot), TyRef::known_with_args(Ty::Ref, vec![var.ty.clone()]))
+                        (mir::Expr::Ref(var.stack_slot), TyRef::known(Ty::Ref(var.ty.clone())))
                     }
                     _ => panic!(),
                 }

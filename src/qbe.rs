@@ -26,28 +26,28 @@ enum Value {
 }
 
 fn size_bytes(ty: &TyRef) -> u32 {
-    match ty.concrete() {
+    match ty.concrete().unwrap() {
         Ty::Bool => 1,
         Ty::None => 0,
-        Ty::Int(int_ty) => match int_ty.concrete().size {
+        Ty::Int(int_ty) => match int_ty.concrete().unwrap().size {
             Size::B8 => 1,
             Size::B16 => 2,
             Size::B32 => 4,
         }
-        Ty::Ref => 8,
+        Ty::Ref(_) => 8,
     }
 }
 
 fn align_bytes(ty: &TyRef) -> u32 {
-    match ty.concrete() {
+    match ty.concrete().unwrap() {
         Ty::Bool => 1,
         Ty::None => 0,
-        Ty::Int(int_ty) => match int_ty.concrete().size {
+        Ty::Int(int_ty) => match int_ty.concrete().unwrap().size {
             Size::B8 => 1,
             Size::B16 => 2,
             Size::B32 => 4,
         }
-        Ty::Ref => 8,
+        Ty::Ref(_) => 8,
     }
 }
 
@@ -78,10 +78,10 @@ pub fn compile_fun<W: Write>(fun: &Fun, output: W) -> io::Result<()> {
     };
     let mut params = vec![];
     for param in &fun.params {
-        match param.concrete() {
+        match param.concrete().unwrap() {
             Ty::Bool => params.push(("w", compiler.new_temp(), param)),
             Ty::None => {}
-            Ty::Ref => params.push(("l", compiler.new_temp(), param)),
+            Ty::Ref(_) => params.push(("l", compiler.new_temp(), param)),
             Ty::Int(_) => params.push(("w", compiler.new_temp(), param)),
         }
     }
@@ -90,11 +90,11 @@ pub fn compile_fun<W: Write>(fun: &Fun, output: W) -> io::Result<()> {
     writeln!(compiler.output, "@start")?;
     for (_, temp, ty) in &params {
         let addr = compiler.alloc_ty(ty)?;
-        match ty.concrete() {
+        match ty.concrete().unwrap() {
             Ty::Bool => compiler.store(Value::Bool(*temp), addr)?,
             Ty::None => (),
-            Ty::Ref => compiler.store(Value::Pointer(*temp), addr)?,
-            Ty::Int(ty) => compiler.store(Value::Int { temp: *temp, ty: ty.concrete() }, addr)?,
+            Ty::Ref(_) => compiler.store(Value::Pointer(*temp), addr)?,
+            Ty::Int(ty) => compiler.store(Value::Int { temp: *temp, ty: ty.concrete().unwrap() }, addr)?,
         }
     }
     for block_id in fun.blocks() {
@@ -179,7 +179,7 @@ impl<'f, W: Write> Compiler<'f, W> {
             Expr::Int { value, ty } => {
                 let temp = self.new_temp();
                 writeln!(self.output, "  {} =w add {}, 0", temp, value)?;
-                Value::Int { temp, ty: ty.concrete() }
+                Value::Int { temp, ty: ty.concrete().unwrap() }
             }
             Expr::Bool(value) => {
                 let temp = self.new_temp();
@@ -259,7 +259,7 @@ impl<'f, W: Write> Compiler<'f, W> {
         Ok(())
     }
     fn load(&mut self, ty: &TyRef, addr: Temp) -> io::Result<Value> {
-        Ok(match ty.concrete() {
+        Ok(match ty.concrete().unwrap() {
             Ty::Bool => {
                 let temp = self.new_temp();
                 writeln!(self.output, "  {} =w loadb {}", temp, addr)?;
@@ -267,7 +267,7 @@ impl<'f, W: Write> Compiler<'f, W> {
             }
             Ty::Int(int_ty) => {
                 let temp = self.new_temp();
-                let int = int_ty.concrete();
+                let int = int_ty.concrete().unwrap();
                 let op = match (int.signedness, int.size) {
                     (Signedness::Signed, Size::B8) => "loadsb",
                     (Signedness::Signed, Size::B16) => "loadsh",
@@ -279,7 +279,7 @@ impl<'f, W: Write> Compiler<'f, W> {
                 writeln!(self.output, "  {} =w {} {}", temp, op, addr)?;
                 Value::Int { temp, ty: int }
             }
-            Ty::Ref => {
+            Ty::Ref(_) => {
                 let temp = self.new_temp();
                 writeln!(self.output, "  {} =l loadl {}", temp, addr)?;
                 Value::Pointer(temp)

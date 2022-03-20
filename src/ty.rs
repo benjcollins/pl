@@ -9,7 +9,7 @@ pub type IntTyRef = InferTyRef<IntTy>;
 pub enum Ty {
     Bool,
     None,
-    Ref,
+    Ref(TyRef),
     Int(IntTyRef),
 }
 
@@ -32,12 +32,13 @@ pub enum Size {
 impl Unify for Ty {
     fn unify(a: &Ty, b: &Ty) -> Result<(), ()> {
         match (a, b) {
-            (Ty::Bool, Ty::Bool) => Ok(()),
-            (Ty::None, Ty::None) => Ok(()),
-            (Ty::Ref, Ty::Ref) => Ok(()),
-            (Ty::Int(a), Ty::Int(b)) => unify(&a, &b).map(|_| ()),
-            _ => Err(())
-        }
+            (Ty::Bool, Ty::Bool) => (),
+            (Ty::None, Ty::None) => (),
+            (Ty::Ref(a), Ty::Ref(b)) => _ = unify(&a, &b)?,
+            (Ty::Int(a), Ty::Int(b)) => _ = unify(&a, &b)?,
+            _ => Err(())?,
+        };
+        Ok(())
     }
 }
 
@@ -62,13 +63,35 @@ impl fmt::Display for IntTy {
     }
 }
 
+pub struct TyOption(pub Option<Ty>);
+
+impl fmt::Display for TyOption {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.0 {
+            Some(ty) => write!(f, "{}", ty),
+            None => write!(f, "any?"),
+        }
+    }
+}
+
+pub struct IntTyOption(pub Option<IntTy>);
+
+impl fmt::Display for IntTyOption {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Some(ty) => write!(f, "{}", ty),
+            None => write!(f, "int?"),
+        }
+    }
+}
+
 impl fmt::Display for Ty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Ty::Bool => write!(f, "bool"),
             Ty::None => write!(f, "none"),
-            Ty::Ref => write!(f, "ref"),
-            Ty::Int(int_ty) => write!(f, "{}", int_ty),
+            Ty::Ref(ty) => write!(f, "&{}", TyOption(ty.concrete())),
+            Ty::Int(int_ty) => write!(f, "{}", IntTyOption(int_ty.concrete())),
         }
     }
 }

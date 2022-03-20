@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::ty::{TyRef, IntTyRef};
+use crate::ty::{TyRef, IntTyRef, TyOption, IntTyOption};
 
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -143,7 +143,7 @@ impl fmt::Display for Block {
 impl fmt::Display for Stmt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Stmt::Alloc(ty) => write!(f, "alloc {}", ty),
+            Stmt::Alloc(ty) => write!(f, "alloc({})", TyOption(ty.concrete())),
             Stmt::Assign { assign, expr } => write!(f, "{} = {}", assign, expr),
         }
     }
@@ -161,12 +161,12 @@ impl fmt::Display for Assign {
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Int { value, ty } => write!(f, "{}{}", value, ty),
+            Expr::Int { value, ty } => write!(f, "({}) {}", IntTyOption(ty.concrete()), value),
             Expr::Binary { left, right, op } => write!(f, "({} {} {})", left, op, right),
             Expr::Bool(value) => write!(f, "{}", if *value { "true" } else { "false" }),
-            Expr::Load { stack_slot, ty } => write!(f, "${}:{}", stack_slot, ty),
+            Expr::Load { stack_slot, ty } => write!(f, "({}) ${}", TyOption(ty.concrete()), stack_slot),
             Expr::Ref(stack_slot) => write!(f, "&${}", stack_slot),
-            Expr::Deref { expr, ty } => write!(f, "*({}) {}", ty, expr),
+            Expr::Deref { expr, ty } => write!(f, "*({}) {}", TyOption(ty.concrete()), expr),
         }
     }
 }
