@@ -24,7 +24,7 @@ enum Prec {
 
 #[derive(Debug)]
 pub struct ParseError {
-    token: Token,
+    pub token: Token,
 }
 
 type ParseResult<T> = Result<T, ParseError>;
