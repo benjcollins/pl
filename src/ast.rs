@@ -49,7 +49,8 @@ pub enum Expr {
     Prefix {
         op: PrefixOp,
         expr: Box<Expr>,
-    }
+    },
+    FnCall(FnCall),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -101,6 +102,12 @@ pub struct Block {
 pub struct Param {
     pub name: Ident,
     pub ty: Ty,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FnCall {
+    name: Ident,
+    args: Vec<Expr>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

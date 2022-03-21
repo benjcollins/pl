@@ -1,4 +1,4 @@
-use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Ident, Stmt, Else, If, Block, Ty, Fun, PrefixOp, Assign, Param}};
+use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Ident, Stmt, Else, If, Block, Ty, Fun, PrefixOp, Assign, Param, FnCall}};
 
 pub fn parse(tokens: &[Token]) -> ParseResult<Vec<Fun>> {
     let mut parser = Parser {
@@ -34,16 +34,19 @@ pub struct ParseError {
 type ParseResult<T> = Result<T, ParseError>;
 
 impl<'a> Parser<'a> {
-    fn next(&mut self) {
+    fn next(&mut self) -> Token {
+        let token = self.peek();
         self.index += 1;
+        token
     }
     fn peek(&self) -> Token {
         self.tokens[self.index]
     }
-    fn eat(&mut self, kind: TokenKind) -> ParseResult<()> {
+    fn eat(&mut self, kind: TokenKind) -> ParseResult<Token> {
         if self.peek().kind == kind {
+            let token = self.peek();
             self.next();
-            Ok(())
+            Ok(token)
         } else {
             Err(self.unexpected_token())
         }
@@ -51,18 +54,34 @@ impl<'a> Parser<'a> {
     fn unexpected_token(&self) -> ParseError {
         ParseError { token: self.peek() }
     }
+    fn parse_list<T>(&mut self, sep: TokenKind, term: TokenKind, f: impl Fn(&mut Parser) -> ParseResult<T>) -> ParseResult<Vec<T>> {
+        let mut items = vec![];
+        if self.peek().kind != term {
+            items.push(f(self)?);
+            while self.peek().kind != sep {
+                items.push(f(self)?);
+            }
+        }
+        self.eat(term)?;
+        Ok(items)
+    }
     fn parse_expr(&mut self, prec: Prec) -> ParseResult<Expr> {
-        let token = self.peek();
-        let mut left = match token.kind {
+        let mut left = match self.peek().kind {
             TokenKind::Asterisk => self.parse_prefix(PrefixOp::Deref, Prec::Ref)?,
             TokenKind::Ampersand => self.parse_prefix(PrefixOp::Ref, Prec::Ref)?,
 
             TokenKind::Ident => {
-                self.next();
-                Expr::Ident(Ident { start: token.start, end: token.end })
+                let ident = Ident::new(self.next());
+                if self.peek().kind == TokenKind::OpenBrace {
+                    self.next();
+                    let args = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| parser.parse_expr(Prec::Bracket))?;
+                    Expr::FnCall(FnCall { name: ident, args })
+                } else {
+                    Expr::Ident(ident)
+                }
             }
             TokenKind::Integer => {
-                self.next();
+                let token = self.next();
                 Expr::Integer { start: token.start, end: token.end }
             }
             TokenKind::True => {
@@ -131,9 +150,7 @@ impl<'a> Parser<'a> {
                 Assign::Deref(Box::new(self.parse_assign()?))
             }
             TokenKind::Ident => {
-                let name = Ident { start: self.peek().start, end: self.peek().end };
-                self.next();
-                Assign::Name(name)
+                Assign::Name(Ident::new(self.next()))
             }
             _ => Err(self.unexpected_token())?,
         })
@@ -152,9 +169,7 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Var => {
                 self.next();
-                let token = self.peek();
-                self.eat(TokenKind::Ident)?;
-                let ident = Ident { start: token.start, end: token.end };
+                let ident = Ident::new(self.eat(TokenKind::Ident)?);
 
                 let ty = if self.peek().kind == TokenKind::Colon {
                     self.next();
@@ -222,25 +237,15 @@ impl<'a> Parser<'a> {
             false
         };
         self.eat(TokenKind::Fn)?;
-        let token = self.peek();
-        self.eat(TokenKind::Ident)?;
-        let name = Ident { start: token.start, end: token.end };
+        let name = Ident::new(self.eat(TokenKind::Ident)?);
 
         self.eat(TokenKind::OpenBrace)?;
-        let mut params = vec![];
-        if self.peek().kind != TokenKind::CloseBrace {
-            loop {
-                let token = self.peek();
-                self.eat(TokenKind::Ident)?;
-                let name = Ident::new(token);
-                self.eat(TokenKind::Colon)?;
-                let ty = self.parse_ty()?;
-                params.push(Param { name, ty });
-                if self.peek().kind != TokenKind::Comma { break }
-                self.next();
-            }
-        }
-        self.eat(TokenKind::CloseBrace)?;
+        let params = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| {
+            let name = Ident::new(parser.eat(TokenKind::Ident)?);
+            parser.eat(TokenKind::Colon)?;
+            let ty = parser.parse_ty()?;
+            Ok(Param { name, ty })
+        })?;
         let returns = if self.peek().kind != TokenKind::OpenCurlyBrace {
             Some(self.parse_ty()?)
         } else {
