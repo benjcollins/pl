@@ -111,13 +111,13 @@ impl<'a> Compiler<'a> {
                     self.fun.get_block_mut(*block_id).stmts.push(mir::Stmt::Assign { assign, expr });
                 }
                 ast::Stmt::Return { expr } => {
-                    let (expr, ty) = self.compile_expr(expr);
-                    let returns = match &self.returns {
-                        Some(ty) => ty,
-                        None => panic!(),
-                    };
-                    unify(&ty, returns).unwrap();
-                    self.fun.get_block_mut(*block_id).branch = mir::Branch::Return(Some(expr));
+                    let expr = expr.as_ref().and_then(|expr| self.returns.clone().and_then(|returns| {
+                        let (expr, ty) = self.compile_expr(expr);
+                        unify(&returns, &ty).unwrap();
+                        Some(expr)
+                    }));
+
+                    self.fun.get_block_mut(*block_id).branch = mir::Branch::Return(expr);
                     break
                 }
                 ast::Stmt::If(if_stmt) => self.compile_if(if_stmt, block_id),

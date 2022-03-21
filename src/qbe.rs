@@ -183,7 +183,7 @@ impl<'f, W: Write> Compiler<'f, W> {
         Ok(match expr {
             Expr::Int { value, ty } => {
                 let temp = self.new_temp();
-                writeln!(self.output, "  {} =w add {}, 0", temp, value)?;
+                writeln!(self.output, "  {} =w copy {}", temp, value)?;
                 Value::Int { temp, ty: ty.concrete().unwrap() }
             }
             Expr::Bool(value) => {
@@ -257,7 +257,7 @@ impl<'f, W: Write> Compiler<'f, W> {
                 writeln!(self.output, "  {} {}, {}", op, temp, addr)?;
             }
             Value::Pointer(temp) => {
-                writeln!(self.output, "  storew {}, {}", temp, addr)?;
+                writeln!(self.output, "  storel {}, {}", temp, addr)?;
             }
         }
         Ok(())

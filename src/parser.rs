@@ -173,7 +173,11 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Return => {
                 self.next();
-                let expr = self.parse_expr(Prec::Bracket)?;
+                let expr = if self.peek().kind == TokenKind::Semicolon {
+                    None
+                } else {
+                    Some(self.parse_expr(Prec::Bracket)?)
+                };
                 self.eat(TokenKind::Semicolon)?;
                 Stmt::Return { expr }
             }

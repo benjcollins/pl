@@ -78,7 +78,7 @@ pub enum InfixOp {
 pub enum Stmt {
     Let { ident: Ident, expr: Option<Expr>, ty: Option<Ty> },
     Assign { assign: Assign, expr: Expr },
-    Return { expr: Expr },
+    Return { expr: Option<Expr> },
     While {
         cond: Expr,
         body: Block,
