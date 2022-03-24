@@ -58,7 +58,8 @@ impl<'a> Parser<'a> {
         let mut items = vec![];
         if self.peek().kind != term {
             items.push(f(self)?);
-            while self.peek().kind != sep {
+            while self.peek().kind == sep {
+                self.next();
                 items.push(f(self)?);
             }
         }
@@ -246,12 +247,17 @@ impl<'a> Parser<'a> {
             let ty = parser.parse_ty()?;
             Ok(Param { name, ty })
         })?;
-        let returns = if self.peek().kind != TokenKind::OpenCurlyBrace {
+        let returns = if self.peek().kind == TokenKind::Colon {
+            self.next();
             Some(self.parse_ty()?)
         } else {
             None
         };
-        let block = self.parse_block()?;
-        Ok(Fun { block, params, returns, name, is_extern })
+        let body = if self.peek().kind == TokenKind::OpenCurlyBrace {
+            Some(self.parse_block()?)
+        } else {
+            None
+        };
+        Ok(Fun { body, params, returns, name, is_extern })
     }
 }

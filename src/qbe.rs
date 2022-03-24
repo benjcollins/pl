@@ -56,6 +56,23 @@ fn ty_name(ty: &TyRef) -> &str {
     }
 }
 
+impl Value {
+    fn name(&self) -> &str {
+        match self {
+            Value::Int { .. } => "w",
+            Value::Pointer(_) => "l",
+            Value::Bool(_) => "w",
+        }
+    }
+    fn temp(&self) -> Temp {
+        match *self {
+            Value::Int { temp, .. } => temp,
+            Value::Pointer(temp) => temp,
+            Value::Bool(temp) => temp,
+        }
+    }
+}
+
 impl fmt::Display for Temp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "%v{}", self.0)
@@ -240,6 +257,25 @@ impl<'f, W: Write> Compiler<'f, W> {
                     _ => panic!(),
                 };
                 self.load(ty, temp)?
+            }
+            Expr::FnCall { name, args, result } => {
+                let temp = self.new_temp();
+                let value = match result.concrete().unwrap() {
+                    Ty::Bool => Value::Bool(temp),
+                    Ty::Ref(_) => Value::Pointer(temp),
+                    Ty::Int(ty) => Value::Int { temp, ty: ty.concrete().unwrap() },
+                };
+                let values: Vec<_> = args.iter().map(|arg| self.compile_expr(arg).unwrap()).collect();
+                write!(self.output, "  {} ={} call ${}(", temp, ty_name(result), name)?;
+                let mut value_iter = values.iter();
+                if let Some(value) = value_iter.next() {
+                    write!(self.output, "{} {}", value.name(), value.temp())?;
+                    for value in value_iter {
+                        write!(self.output, ", {} {}", value.name(), value.temp())?;
+                    }
+                }
+                writeln!(self.output, ")")?;
+                value
             }
         })
     }

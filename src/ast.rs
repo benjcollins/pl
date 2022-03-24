@@ -106,15 +106,15 @@ pub struct Param {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnCall {
-    name: Ident,
-    args: Vec<Expr>,
+    pub name: Ident,
+    pub args: Vec<Expr>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Fun {
     pub params: Vec<Param>,
     pub returns: Option<Ty>,
-    pub block: Block,
+    pub body: Option<Block>,
     pub name: Ident,
     pub is_extern: bool,
 }

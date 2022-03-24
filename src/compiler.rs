@@ -5,6 +5,7 @@ struct Compiler<'a> {
     scope: Vec<Variable>,
     fun: mir::Fun<'a>,
     returns: Option<TyRef>,
+    fns: &'a [ast::Fun],
 }
 
 #[derive(Debug, Clone)]
@@ -14,7 +15,8 @@ struct Variable {
     ty: TyRef,
 }
 
-pub fn compile_fun<'a>(fun: &ast::Fun, src: &'a str) -> mir::Fun<'a> {
+pub fn compile_fun<'a>(fun: &ast::Fun, fns: &'a [ast::Fun], src: &'a str) -> Option<mir::Fun<'a>> {
+    let body = fun.body.as_ref()?;
     let returns = fun.returns.as_ref().map(|ty| compile_ty(&ty, src));
     let mut scope = vec![];
     let mut params = vec![];
@@ -29,10 +31,11 @@ pub fn compile_fun<'a>(fun: &ast::Fun, src: &'a str) -> mir::Fun<'a> {
         scope,
         src,
         returns,
+        fns,
     };
     let mut block_id = compiler.fun.new_block();
-    compiler.compile_block(&fun.block, &mut block_id);
-    compiler.fun
+    compiler.compile_block(&body, &mut block_id);
+    Some(compiler.fun)
 }
 
 fn compile_ty(ty: &ast::Ty, src: &str) -> TyRef {
@@ -170,7 +173,7 @@ impl<'a> Compiler<'a> {
     fn lookup_var(&self, name: ast::Ident) -> &Variable {
         self.scope.iter().find(|var| var.name.eq(name, self.src)).unwrap()
     }
-    fn compile_expr(&mut self, expr: &ast::Expr) -> (mir::Expr, TyRef) {
+    fn compile_expr(&mut self, expr: &ast::Expr) -> (mir::Expr<'a>, TyRef) {
         match expr {
             ast::Expr::Integer { start, end } => {
                 let int_ty = IntTyRef::any();
@@ -212,9 +215,22 @@ impl<'a> Compiler<'a> {
                     _ => panic!(),
                 }
             }
+            ast::Expr::FnCall(fn_call) => {
+                let fun = self.fns.iter().find(|fun| fun.name.eq(fn_call.name, self.src)).unwrap();
+                if fn_call.args.len() != fun.params.len() {
+                    panic!()
+                }
+                let args = fn_call.args.iter().zip(&fun.params).map(|(arg, param)| {
+                    let (expr, ty) = self.compile_expr(arg);
+                    unify(&ty, &compile_ty(&param.ty, self.src)).unwrap();
+                    expr
+                }).collect();
+                let result = compile_ty(fun.returns.as_ref().unwrap(), self.src);
+                (mir::Expr::FnCall { name: fun.name.as_str(self.src), args, result: result.clone() }, result)
+            }
         }
     }
-    fn compile_arth_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::BinaryOp) -> (mir::Expr, TyRef) {
+    fn compile_arth_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::BinaryOp) -> (mir::Expr<'a>, TyRef) {
         let (left_expr, left_ty) = self.compile_expr(left);
         let (right_expr, right_ty) = self.compile_expr(right);
         let int_ty = TyRef::known(Ty::Int(IntTyRef::any()));
@@ -226,7 +242,7 @@ impl<'a> Compiler<'a> {
             op,
         }, int_ty)
     }
-    fn compile_cmp_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::BinaryOp) -> (mir::Expr, TyRef) {
+    fn compile_cmp_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::BinaryOp) -> (mir::Expr<'a>, TyRef) {
         let (left_expr, left_ty) = self.compile_expr(left);
         let (right_expr, right_ty) = self.compile_expr(right);
         let int_ty = TyRef::known(Ty::Int(IntTyRef::any()));

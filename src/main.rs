@@ -16,7 +16,9 @@ fn main() {
     let fn_asts = parser::parse(&tokens).unwrap();
     let mut fn_mirs = vec![];
     for fn_ast in &fn_asts {
-        fn_mirs.push(compiler::compile_fun(fn_ast, src));
+        if let Some(fn_mir) = compiler::compile_fun(fn_ast, &fn_asts, src) {
+            fn_mirs.push(fn_mir);
+        }
     }
 
     let file = File::create("output.ssa").unwrap();

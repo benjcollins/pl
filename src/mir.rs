@@ -1,22 +1,22 @@
 use std::fmt;
 
-use crate::ty::{TyRef, IntTyRef, TyOption, IntTyOption};
+use crate::{ty::{TyRef, IntTyRef, TyOption, IntTyOption}};
 
 #[derive(Debug, Clone)]
-pub struct Block {
-    pub stmts: Vec<Stmt>,
-    pub branch: Branch,
+pub struct Block<'a> {
+    pub stmts: Vec<Stmt<'a>>,
+    pub branch: Branch<'a>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct BlockId(u32);
 
 #[derive(Debug, Clone)]
-pub enum Branch {
-    Return(Option<Expr>),
+pub enum Branch<'a> {
+    Return(Option<Expr<'a>>),
     Static(BlockId),
     Condition {
-        expr: Expr,
+        expr: Expr<'a>,
         if_true: BlockId,
         if_false: BlockId,
     },
@@ -28,15 +28,15 @@ pub struct Fun<'a> {
     pub is_extern: bool,
     pub params: Vec<TyRef>,
     pub returns: Option<TyRef>,
-    blocks: Vec<Block>,
+    blocks: Vec<Block<'a>>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Stmt {
+pub enum Stmt<'a> {
     Alloc(TyRef),
     Assign {
         assign: Assign,
-        expr: Expr,
+        expr: Expr<'a>,
     }
 }
 
@@ -47,14 +47,14 @@ pub enum Assign {
 }
 
 #[derive(Debug, Clone)]
-pub enum Expr {
+pub enum Expr<'a> {
     Int {
         value: u32,
         ty: IntTyRef,
     },
     Binary {
-        left: Box<Expr>,
-        right: Box<Expr>,
+        left: Box<Expr<'a>>,
+        right: Box<Expr<'a>>,
         op: BinaryOp,
     },
     Bool(bool),
@@ -64,9 +64,14 @@ pub enum Expr {
     },
     Ref(u32),
     Deref {
-        expr: Box<Expr>,
+        expr: Box<Expr<'a>>,
         ty: TyRef,
     },
+    FnCall {
+        name: &'a str,
+        args: Vec<Expr<'a>>,
+        result: TyRef,
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -99,7 +104,7 @@ impl<'a> Fun<'a> {
         self.blocks.push(Block { stmts: vec![], branch: Branch::Return(None) });
         id
     }
-    pub fn get_block_mut(&mut self, id: BlockId) -> &mut Block {
+    pub fn get_block_mut(&mut self, id: BlockId) -> &mut Block<'a> {
         &mut self.blocks[id.0 as usize]
     }
     pub fn get_block(&self, id: BlockId) -> &Block {
@@ -139,7 +144,7 @@ impl<'a> fmt::Display for Fun<'a> {
     }
 }
 
-impl fmt::Display for Block {
+impl<'a> fmt::Display for Block<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for stmt in &self.stmts {
             writeln!(f, "  {}", stmt)?;
@@ -148,7 +153,7 @@ impl fmt::Display for Block {
     }
 }
 
-impl fmt::Display for Stmt {
+impl<'a> fmt::Display for Stmt<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Stmt::Alloc(ty) => write!(f, "alloc({})", TyOption(ty.concrete())),
@@ -166,15 +171,16 @@ impl fmt::Display for Assign {
     }
 }
 
-impl fmt::Display for Expr {
+impl<'a> fmt::Display for Expr<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Int { value, ty } => write!(f, "({}) {}", IntTyOption(ty.concrete()), value),
+            Expr::Int { value, ty } => write!(f, "{}{}", value, IntTyOption(ty.concrete())),
             Expr::Binary { left, right, op } => write!(f, "({} {} {})", left, op, right),
             Expr::Bool(value) => write!(f, "{}", if *value { "true" } else { "false" }),
             Expr::Load { stack_slot, ty } => write!(f, "({}) ${}", TyOption(ty.concrete()), stack_slot),
             Expr::Ref(stack_slot) => write!(f, "&${}", stack_slot),
             Expr::Deref { expr, ty } => write!(f, "*({}) {}", TyOption(ty.concrete()), expr),
+            Expr::FnCall { .. } => todo!(),
         }
     }
 }

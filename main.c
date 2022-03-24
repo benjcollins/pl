@@ -1,9 +1,12 @@
 #include <stdio.h>
 
-extern void incr(int *n);
+extern void my_main();
+
+int print_int(int n) {
+    printf("%d\n", n);
+    return 0;
+}
 
 int main() {
-    int n = 2;
-    incr(&n);
-    printf("%d\n", n);
+    my_main();
 }

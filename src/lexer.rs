@@ -18,9 +18,9 @@ pub fn lex<'a>(src: &'a str) -> Vec<Token> {
                 lexer.next_while(|ch| ch.is_numeric());
                 lexer.push_token(offset, TokenKind::Integer);
             }
-            ch if ch.is_alphabetic() => {
+            ch if ch.is_alphabetic() || ch == '_' => {
                 let offset = lexer.offset;
-                lexer.next_while(|ch| ch.is_alphanumeric());
+                lexer.next_while(|ch| ch.is_alphanumeric() || ch == '_');
                 let content = &lexer.src[offset..lexer.offset];
                 let kind = match content {
                     "var" => TokenKind::Var,
