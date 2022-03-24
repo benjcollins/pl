@@ -269,7 +269,7 @@ impl<'f, W: Write> Compiler<'f, W> {
                     Ty::Ref(_) => Value::Pointer(temp),
                     Ty::Int(ty) => Value::Int { temp, ty: ty.concrete().unwrap() },
                 };
-                self.compile_fn_call(name, args, &value);
+                self.compile_fn_call(name, args, &value)?;
                 value
             }
         })

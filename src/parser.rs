@@ -1,9 +1,10 @@
-use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Ident, Stmt, Else, If, Block, Ty, Fun, PrefixOp, Assign, Param, FnCall}};
+use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Fun, PrefixOp, Assign, Param, FnCall}};
 
-pub fn parse(tokens: &[Token]) -> ParseResult<Vec<Fun>> {
+pub fn parse<'a>(tokens: &[Token], src: &'a str) -> ParseResult<Vec<Fun<'a>>> {
     let mut parser = Parser {
         index: 0,
         tokens,
+        src,
     };
     let mut fns = vec![];
     while parser.index < parser.tokens.len() {
@@ -12,9 +13,10 @@ pub fn parse(tokens: &[Token]) -> ParseResult<Vec<Fun>> {
     Ok(fns)
 }
 
-struct Parser<'a> {
-    tokens: &'a [Token],
+struct Parser<'a, 'b> {
+    tokens: &'b [Token],
     index: usize,
+    src: &'a str,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -33,7 +35,7 @@ pub struct ParseError {
 
 type ParseResult<T> = Result<T, ParseError>;
 
-impl<'a> Parser<'a> {
+impl<'a, 'b> Parser<'a, 'b> {
     fn next(&mut self) -> Token {
         let token = self.peek();
         self.index += 1;
@@ -54,7 +56,7 @@ impl<'a> Parser<'a> {
     fn unexpected_token(&self) -> ParseError {
         ParseError { token: self.peek() }
     }
-    fn parse_list<T>(&mut self, sep: TokenKind, term: TokenKind, f: impl Fn(&mut Parser) -> ParseResult<T>) -> ParseResult<Vec<T>> {
+    fn parse_list<T>(&mut self, sep: TokenKind, term: TokenKind, f: impl Fn(&mut Parser<'a, 'b>) -> ParseResult<T>) -> ParseResult<Vec<T>> {
         let mut items = vec![];
         if self.peek().kind != term {
             items.push(f(self)?);
@@ -66,13 +68,13 @@ impl<'a> Parser<'a> {
         self.eat(term)?;
         Ok(items)
     }
-    fn parse_expr(&mut self, prec: Prec) -> ParseResult<Expr> {
+    fn parse_expr(&mut self, prec: Prec) -> ParseResult<Expr<'a>> {
         let mut left = match self.peek().kind {
             TokenKind::Asterisk => self.parse_prefix(PrefixOp::Deref, Prec::Ref)?,
             TokenKind::Ampersand => self.parse_prefix(PrefixOp::Ref, Prec::Ref)?,
 
             TokenKind::Ident => {
-                let ident = Ident::new(self.next());
+                let ident = self.next().as_str(self.src);
                 if self.peek().kind == TokenKind::OpenBrace {
                     self.next();
                     let args = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| parser.parse_expr(Prec::Bracket))?;
@@ -82,8 +84,7 @@ impl<'a> Parser<'a> {
                 }
             }
             TokenKind::Integer => {
-                let token = self.next();
-                Expr::Integer { start: token.start, end: token.end }
+                Expr::Integer(self.next().as_str(self.src))
             }
             TokenKind::True => {
                 self.next();
@@ -115,12 +116,12 @@ impl<'a> Parser<'a> {
         }
         Ok(left)
     }
-    fn parse_prefix(&mut self, op: PrefixOp, prec: Prec) -> ParseResult<Expr> {
+    fn parse_prefix(&mut self, op: PrefixOp, prec: Prec) -> ParseResult<Expr<'a>> {
         self.next();
         let expr = Box::new(self.parse_expr(prec)?);
         Ok(Expr::Prefix { op, expr })
     }
-    fn parse_infix(&mut self, left: Expr, op: InfixOp, prec: Prec) -> ParseResult<Expr> {
+    fn parse_infix(&mut self, left: Expr<'a>, op: InfixOp, prec: Prec) -> ParseResult<Expr<'a>> {
         self.next();
         let right = self.parse_expr(prec)?;
         Ok(Expr::Infix {
@@ -129,7 +130,7 @@ impl<'a> Parser<'a> {
             op,
         })
     }
-    fn parse_if(&mut self) -> ParseResult<If> {
+    fn parse_if(&mut self) -> ParseResult<If<'a>> {
         let cond = Box::new(self.parse_expr(Prec::Bracket)?);
         let if_block = self.parse_block()?;
         let else_block = if self.peek().kind == TokenKind::Else {
@@ -144,19 +145,19 @@ impl<'a> Parser<'a> {
         };
         Ok(If { cond, if_block, else_block })
     }
-    fn parse_assign(&mut self) -> ParseResult<Assign> {
+    fn parse_assign(&mut self) -> ParseResult<Assign<'a>> {
         Ok(match self.peek().kind {
             TokenKind::Asterisk => {
                 self.next();
                 Assign::Deref(Box::new(self.parse_assign()?))
             }
             TokenKind::Ident => {
-                Assign::Name(Ident::new(self.next()))
+                Assign::Name(self.next().as_str(self.src))
             }
             _ => Err(self.unexpected_token())?,
         })
     }
-    fn parse_stmt(&mut self) -> ParseResult<Stmt> {
+    fn parse_stmt(&mut self) -> ParseResult<Stmt<'a>> {
         Ok(match self.peek().kind {
             TokenKind::If => {
                 self.next();
@@ -170,7 +171,7 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Var => {
                 self.next();
-                let ident = Ident::new(self.eat(TokenKind::Ident)?);
+                let ident = self.eat(TokenKind::Ident)?.as_str(self.src);
 
                 let ty = if self.peek().kind == TokenKind::Colon {
                     self.next();
@@ -195,10 +196,10 @@ impl<'a> Parser<'a> {
                     Some(self.parse_expr(Prec::Bracket)?)
                 };
                 self.eat(TokenKind::Semicolon)?;
-                Stmt::Return { expr }
+                Stmt::Return(expr)
             }
             TokenKind::Ident => {
-                let name = Ident::new(self.next());
+                let name = self.next().as_str(self.src);
                 let stmt = if self.peek().kind == TokenKind::OpenBrace {
                     self.next();
                     let args = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| parser.parse_expr(Prec::Bracket))?;
@@ -221,21 +222,19 @@ impl<'a> Parser<'a> {
             _ => Err(self.unexpected_token())?,
         })
     }
-    fn parse_ty(&mut self) -> ParseResult<Ty> {
+    fn parse_ty(&mut self) -> ParseResult<Ty<'a>> {
         Ok(match self.peek().kind {
             TokenKind::Ampersand => {
                 self.next();
                 Ty::Ref(Box::new(self.parse_ty()?))
             }
             TokenKind::Ident => {
-                let name = Ident { start: self.peek().start, end: self.peek().end };
-                self.next();
-                Ty::Name(name)
+                Ty::Name(self.next().as_str(self.src))
             }
             _ => Err(self.unexpected_token())?,
         })
     }
-    fn parse_block(&mut self) -> ParseResult<Block> {
+    fn parse_block(&mut self) -> ParseResult<Block<'a>> {
         self.eat(TokenKind::OpenCurlyBrace)?;
         let mut stmts = vec![];
         while self.peek().kind != TokenKind::CloseCurlyBrace {
@@ -244,7 +243,7 @@ impl<'a> Parser<'a> {
         self.next();
         Ok(Block { stmts })
     }
-    fn parse_fn(&mut self) -> ParseResult<Fun> {
+    fn parse_fn(&mut self) -> ParseResult<Fun<'a>> {
         let is_extern = if self.peek().kind == TokenKind::Extern {
             self.next();
             true
@@ -252,11 +251,11 @@ impl<'a> Parser<'a> {
             false
         };
         self.eat(TokenKind::Fn)?;
-        let name = Ident::new(self.eat(TokenKind::Ident)?);
+        let name = self.eat(TokenKind::Ident)?.as_str(self.src);
 
         self.eat(TokenKind::OpenBrace)?;
         let params = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| {
-            let name = Ident::new(parser.eat(TokenKind::Ident)?);
+            let name = parser.eat(TokenKind::Ident)?.as_str(self.src);
             parser.eat(TokenKind::Colon)?;
             let ty = parser.parse_ty()?;
             Ok(Param { name, ty })

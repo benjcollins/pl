@@ -13,10 +13,10 @@ mod qbe;
 fn main() {
     let src = include_str!("../example.txt");
     let tokens = lexer::lex(src);
-    let fn_asts = parser::parse(&tokens).unwrap();
+    let fn_asts = parser::parse(&tokens, src).unwrap();
     let mut fn_mirs = vec![];
     for fn_ast in &fn_asts {
-        if let Some(fn_mir) = compiler::compile_fun(fn_ast, &fn_asts, src) {
+        if let Some(fn_mir) = compiler::compile_fun(fn_ast, &fn_asts) {
             fn_mirs.push(fn_mir);
         }
     }

@@ -38,3 +38,9 @@ pub enum TokenKind {
     OpenCurlyBrace,
     CloseCurlyBrace,
 }
+
+impl Token {
+    pub fn as_str<'a>(&self, src: &'a str) -> &'a str {
+        &src[self.start..self.end]
+    }
+}

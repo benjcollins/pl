@@ -1,62 +1,38 @@
-use crate::token::{Token, TokenKind};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Ident {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Ident {
-    pub fn new(token: Token) -> Ident {
-        assert_eq!(token.kind, TokenKind::Ident);
-        Ident { start: token.start, end: token.end }
-    }
-    pub fn as_str<'src>(&self, src: &'src str) -> &'src str {
-        &src[self.start..self.end]
-    }
-    pub fn eq(&self, other: Ident, src: &str) -> bool {
-        self.as_str(src) == other.as_str(src)
-    }
+#[derive(Debug, Clone, PartialEq)]
+pub struct If<'a> {
+    pub cond: Box<Expr<'a>>,
+    pub if_block: Block<'a>,
+    pub else_block: Else<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct If {
-    pub cond: Box<Expr>,
-    pub if_block: Block,
-    pub else_block: Else,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Else {
-    Block(Block),
-    If(Box<If>),
+pub enum Else<'a> {
+    Block(Block<'a>),
+    If(Box<If<'a>>),
     None,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expr {
-    Integer {
-        start: usize,
-        end: usize,
-    },
+pub enum Expr<'a> {
+    Integer(&'a str),
     Bool(bool),
-    Ident(Ident),
+    Ident(&'a str),
     Infix {
-        left: Box<Expr>,
-        right: Box<Expr>,
+        left: Box<Expr<'a>>,
+        right: Box<Expr<'a>>,
         op: InfixOp,
     },
     Prefix {
         op: PrefixOp,
-        expr: Box<Expr>,
+        expr: Box<Expr<'a>>,
     },
-    FnCall(FnCall),
+    FnCall(FnCall<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Assign {
-    Deref(Box<Assign>),
-    Name(Ident),
+pub enum Assign<'a> {
+    Deref(Box<Assign<'a>>),
+    Name(&'a str),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -76,46 +52,53 @@ pub enum InfixOp {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Stmt {
-    Let { ident: Ident, expr: Option<Expr>, ty: Option<Ty> },
-    Assign { assign: Assign, expr: Expr },
-    Return { expr: Option<Expr> },
-    While {
-        cond: Expr,
-        body: Block,
+pub enum Stmt<'a> {
+    Let {
+        ident: &'a str,
+        expr: Option<Expr<'a>>,
+        ty: Option<Ty<'a>>
     },
-    If(If),
-    FnCall(FnCall),
+    Assign {
+        assign: Assign<'a>,
+        expr: Expr<'a>
+    },
+    While {
+        cond: Expr<'a>,
+        body: Block<'a>,
+    },
+    Return(Option<Expr<'a>>),
+    If(If<'a>),
+    FnCall(FnCall<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Ty {
-    Name(Ident),
-    Ref(Box<Ty>),
+pub enum Ty<'a> {
+    Name(&'a str),
+    Ref(Box<Ty<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Block {
-    pub stmts: Vec<Stmt>,
+pub struct Block<'a> {
+    pub stmts: Vec<Stmt<'a>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Param {
-    pub name: Ident,
-    pub ty: Ty,
+pub struct Param<'a> {
+    pub name: &'a str,
+    pub ty: Ty<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct FnCall {
-    pub name: Ident,
-    pub args: Vec<Expr>,
+pub struct FnCall<'a> {
+    pub name: &'a str,
+    pub args: Vec<Expr<'a>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Fun {
-    pub params: Vec<Param>,
-    pub returns: Option<Ty>,
-    pub body: Option<Block>,
-    pub name: Ident,
+pub struct Fun<'a> {
+    pub params: Vec<Param<'a>>,
+    pub returns: Option<Ty<'a>>,
+    pub body: Option<Block<'a>>,
+    pub name: &'a str,
     pub is_extern: bool,
 }
