@@ -37,7 +37,11 @@ pub enum Stmt<'a> {
     Assign {
         assign: Assign,
         expr: Expr<'a>,
-    }
+    },
+    FnCall {
+        name: &'a str,
+        args: Vec<Expr<'a>>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -158,6 +162,7 @@ impl<'a> fmt::Display for Stmt<'a> {
         match self {
             Stmt::Alloc(ty) => write!(f, "alloc({})", TyOption(ty.concrete())),
             Stmt::Assign { assign, expr } => write!(f, "{} = {}", assign, expr),
+            Stmt::FnCall { .. } => todo!(),
         }
     }
 }

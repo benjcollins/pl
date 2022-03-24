@@ -85,6 +85,7 @@ pub enum Stmt {
         body: Block,
     },
     If(If),
+    FnCall(FnCall),
 }
 
 #[derive(Debug, Clone, PartialEq)]

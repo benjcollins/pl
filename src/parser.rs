@@ -197,7 +197,21 @@ impl<'a> Parser<'a> {
                 self.eat(TokenKind::Semicolon)?;
                 Stmt::Return { expr }
             }
-            TokenKind::Asterisk | TokenKind::Ident => {
+            TokenKind::Ident => {
+                let name = Ident::new(self.next());
+                let stmt = if self.peek().kind == TokenKind::OpenBrace {
+                    self.next();
+                    let args = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| parser.parse_expr(Prec::Bracket))?;
+                    Stmt::FnCall(FnCall { name, args })
+                } else {
+                    self.eat(TokenKind::Equals)?;
+                    let expr = self.parse_expr(Prec::Bracket)?;
+                    Stmt::Assign { assign: Assign::Name(name), expr }
+                };
+                self.eat(TokenKind::Semicolon)?;
+                stmt
+            }
+            TokenKind::Asterisk => {
                 let assign = self.parse_assign()?;
                 self.eat(TokenKind::Equals)?;
                 let expr = self.parse_expr(Prec::Bracket)?;

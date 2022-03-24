@@ -180,6 +180,10 @@ impl<'f, W: Write> Compiler<'f, W> {
                 let temp = self.compile_assign(assign)?;
                 self.store(value, temp)?;
             }
+            Stmt::FnCall { name, args } => {
+                let value = Value::Bool(self.new_temp());
+                self.compile_fn_call(name, args, &value)?;
+            }
         };
         Ok(())
     }
@@ -265,19 +269,23 @@ impl<'f, W: Write> Compiler<'f, W> {
                     Ty::Ref(_) => Value::Pointer(temp),
                     Ty::Int(ty) => Value::Int { temp, ty: ty.concrete().unwrap() },
                 };
-                let values: Vec<_> = args.iter().map(|arg| self.compile_expr(arg).unwrap()).collect();
-                write!(self.output, "  {} ={} call ${}(", temp, ty_name(result), name)?;
-                let mut value_iter = values.iter();
-                if let Some(value) = value_iter.next() {
-                    write!(self.output, "{} {}", value.name(), value.temp())?;
-                    for value in value_iter {
-                        write!(self.output, ", {} {}", value.name(), value.temp())?;
-                    }
-                }
-                writeln!(self.output, ")")?;
+                self.compile_fn_call(name, args, &value);
                 value
             }
         })
+    }
+    fn compile_fn_call(&mut self, name: &str, args: &[Expr], value: &Value) -> io::Result<()> {
+        let values: Vec<_> = args.iter().map(|arg| self.compile_expr(arg).unwrap()).collect();
+        write!(self.output, "  {} ={} call ${}(", value.temp(), value.name(), name)?;
+        let mut value_iter = values.iter();
+        if let Some(value) = value_iter.next() {
+            write!(self.output, "{} {}", value.name(), value.temp())?;
+            for value in value_iter {
+                write!(self.output, ", {} {}", value.name(), value.temp())?;
+            }
+        }
+        writeln!(self.output, ")")?;
+        Ok(())
     }
     fn store(&mut self, value: Value, addr: Temp) -> io::Result<()> {
         match value {

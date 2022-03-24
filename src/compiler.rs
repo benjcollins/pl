@@ -124,6 +124,16 @@ impl<'a> Compiler<'a> {
                     break
                 }
                 ast::Stmt::If(if_stmt) => self.compile_if(if_stmt, block_id),
+                ast::Stmt::FnCall(fn_call) => {
+                    let (args, ty) = self.compile_fn_call(fn_call);
+                    if ty.is_some() {
+                        panic!()
+                    }
+                    self.fun.get_block_mut(*block_id).stmts.push(mir::Stmt::FnCall {
+                        name: fn_call.name.as_str(self.src),
+                        args,
+                    })
+                }
             }
         }
     }
@@ -216,19 +226,23 @@ impl<'a> Compiler<'a> {
                 }
             }
             ast::Expr::FnCall(fn_call) => {
-                let fun = self.fns.iter().find(|fun| fun.name.eq(fn_call.name, self.src)).unwrap();
-                if fn_call.args.len() != fun.params.len() {
-                    panic!()
-                }
-                let args = fn_call.args.iter().zip(&fun.params).map(|(arg, param)| {
-                    let (expr, ty) = self.compile_expr(arg);
-                    unify(&ty, &compile_ty(&param.ty, self.src)).unwrap();
-                    expr
-                }).collect();
-                let result = compile_ty(fun.returns.as_ref().unwrap(), self.src);
-                (mir::Expr::FnCall { name: fun.name.as_str(self.src), args, result: result.clone() }, result)
+                let (args, ty) = self.compile_fn_call(fn_call);
+                let result = ty.unwrap();
+                (mir::Expr::FnCall { name: fn_call.name.as_str(self.src), args, result: result.clone() }, result)
             }
         }
+    }
+    fn compile_fn_call(&mut self, fn_call: &ast::FnCall) -> (Vec<mir::Expr<'a>>, Option<TyRef>) {
+        let fun = self.fns.iter().find(|fun| fun.name.eq(fn_call.name, self.src)).unwrap();
+        if fn_call.args.len() != fun.params.len() {
+            panic!()
+        }
+        let args = fn_call.args.iter().zip(&fun.params).map(|(arg, param)| {
+            let (expr, ty) = self.compile_expr(arg);
+            unify(&ty, &compile_ty(&param.ty, self.src)).unwrap();
+            expr
+        }).collect();
+        (args, fun.returns.as_ref().map(|ty| compile_ty(ty, self.src)))
     }
     fn compile_arth_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::BinaryOp) -> (mir::Expr<'a>, TyRef) {
         let (left_expr, left_ty) = self.compile_expr(left);
