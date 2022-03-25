@@ -162,7 +162,7 @@ impl<'a> fmt::Display for Stmt<'a> {
         match self {
             Stmt::Alloc(ty) => write!(f, "alloc({})", TyOption(ty.concrete())),
             Stmt::Assign { assign, expr } => write!(f, "{} = {}", assign, expr),
-            Stmt::FnCall { .. } => todo!(),
+            Stmt::FnCall { .. } => write!(f, "call"),
         }
     }
 }
@@ -185,7 +185,7 @@ impl<'a> fmt::Display for Expr<'a> {
             Expr::Load { stack_slot, ty } => write!(f, "({}) ${}", TyOption(ty.concrete()), stack_slot),
             Expr::Ref(stack_slot) => write!(f, "&${}", stack_slot),
             Expr::Deref { expr, ty } => write!(f, "*({}) {}", TyOption(ty.concrete()), expr),
-            Expr::FnCall { .. } => todo!(),
+            Expr::FnCall { .. } => write!(f, "call"),
         }
     }
 }

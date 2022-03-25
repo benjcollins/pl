@@ -17,6 +17,7 @@ fn main() {
     let mut fn_mirs = vec![];
     for fn_ast in &fn_asts {
         if let Some(fn_mir) = compiler::compile_fun(fn_ast, &fn_asts) {
+            println!("{}", fn_mir);
             fn_mirs.push(fn_mir);
         }
     }

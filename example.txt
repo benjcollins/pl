@@ -1,9 +1,14 @@
 extern fn print_int(n: i32)
 
 extern fn my_main() {
-    var n = 0;
+    var a = 1;
+    var b = 1;
+    var n: i32 = 0;
     while n < 10 {
-        print_int(n);
+        var c = a;
+        a = a + b;
+        b = c;
         n = n + 1;
+        print_int(b);
     }
 }

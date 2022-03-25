@@ -67,13 +67,3 @@ pub fn unify<T: Unify + Clone>(a: &InferTyRef<T>, b: &InferTyRef<T>) -> Result<I
     *b.0.borrow_mut() = unified.clone();
     Ok(unified)
 }
-
-// impl<T: fmt::Display + Unify + Clone + fmt::Debug> fmt::Display for InferTyRef<T> {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match &*self.0.borrow() {
-//             InferTy::Any => write!(f, "ANY"),
-//             InferTy::Equal(ty) => write!(f, "EQUAL({})", ty),
-//             InferTy::Known(ty) => write!(f, "{}", ty),
-//         }
-//     }
-// }
