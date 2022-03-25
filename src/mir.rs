@@ -38,10 +38,7 @@ pub enum Stmt<'a> {
         assign: Assign,
         expr: Expr<'a>,
     },
-    FnCall {
-        name: &'a str,
-        args: Vec<Expr<'a>>,
-    },
+    FnCall(FnCall<'a>),
 }
 
 #[derive(Debug, Clone)]
@@ -72,10 +69,15 @@ pub enum Expr<'a> {
         ty: TyRef,
     },
     FnCall {
-        name: &'a str,
-        args: Vec<Expr<'a>>,
+        fn_call: FnCall<'a>,
         result: TyRef,
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct FnCall<'a> {
+    pub name: &'a str,
+    pub args: Vec<Expr<'a>>,
 }
 
 #[derive(Debug, Clone, Copy)]

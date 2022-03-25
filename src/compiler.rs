@@ -127,10 +127,10 @@ impl<'a, 'b> Compiler<'a, 'b> {
                     if ty.is_some() {
                         panic!()
                     }
-                    self.fun.get_block_mut(*block_id).stmts.push(mir::Stmt::FnCall {
+                    self.fun.get_block_mut(*block_id).stmts.push(mir::Stmt::FnCall(mir::FnCall {
                         name: fn_call.name,
                         args,
-                    })
+                    }))
                 }
             }
         }
@@ -226,7 +226,10 @@ impl<'a, 'b> Compiler<'a, 'b> {
             ast::Expr::FnCall(fn_call) => {
                 let (args, ty) = self.compile_fn_call(fn_call);
                 let result = ty.unwrap();
-                (mir::Expr::FnCall { name: fn_call.name, args, result: result.clone() }, result)
+                (mir::Expr::FnCall { fn_call: mir::FnCall {
+                    name: fn_call.name,
+                    args,
+                }, result: result.clone() }, result)
             }
         }
     }

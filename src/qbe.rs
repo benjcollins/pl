@@ -1,6 +1,6 @@
 use std::{io::{Write, self}, fmt};
 
-use crate::{mir::{Fun, BlockId, Branch, Stmt, Expr, Assign, BinaryOp}, ty::{IntTy, TyRef, Ty, Size, Signedness}};
+use crate::{mir::{Fun, BlockId, Branch, Stmt, Expr, Assign, BinaryOp, FnCall}, ty::{IntTy, TyRef, Ty, Size, Signedness}};
 
 struct Compiler<'f, W: Write> {
     stack_slots: Vec<Temp>,
@@ -180,9 +180,9 @@ impl<'f, W: Write> Compiler<'f, W> {
                 let temp = self.compile_assign(assign)?;
                 self.store(value, temp)?;
             }
-            Stmt::FnCall { name, args } => {
+            Stmt::FnCall(fn_call) => {
                 let value = Value::Bool(self.new_temp());
-                self.compile_fn_call(name, args, &value)?;
+                self.compile_fn_call(fn_call, &value)?;
             }
         };
         Ok(())
@@ -262,21 +262,21 @@ impl<'f, W: Write> Compiler<'f, W> {
                 };
                 self.load(ty, temp)?
             }
-            Expr::FnCall { name, args, result } => {
+            Expr::FnCall { fn_call, result } => {
                 let temp = self.new_temp();
                 let value = match result.concrete().unwrap() {
                     Ty::Bool => Value::Bool(temp),
                     Ty::Ref(_) => Value::Pointer(temp),
                     Ty::Int(ty) => Value::Int { temp, ty: ty.concrete().unwrap() },
                 };
-                self.compile_fn_call(name, args, &value)?;
+                self.compile_fn_call(fn_call, &value)?;
                 value
             }
         })
     }
-    fn compile_fn_call(&mut self, name: &str, args: &[Expr], value: &Value) -> io::Result<()> {
-        let values: Vec<_> = args.iter().map(|arg| self.compile_expr(arg).unwrap()).collect();
-        write!(self.output, "  {} ={} call ${}(", value.temp(), value.name(), name)?;
+    fn compile_fn_call(&mut self, fn_call: &FnCall, value: &Value) -> io::Result<()> {
+        let values: Vec<_> = fn_call.args.iter().map(|arg| self.compile_expr(arg).unwrap()).collect();
+        write!(self.output, "  {} ={} call ${}(", value.temp(), value.name(), fn_call.name)?;
         let mut value_iter = values.iter();
         if let Some(value) = value_iter.next() {
             write!(self.output, "{} {}", value.name(), value.temp())?;
