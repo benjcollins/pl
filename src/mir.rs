@@ -25,7 +25,6 @@ pub enum Branch<'a> {
 #[derive(Debug, Clone)]
 pub struct Fun<'a> {
     pub name: &'a str,
-    pub is_extern: bool,
     pub params: Vec<TyRef>,
     pub returns: Option<TyRef>,
     blocks: Vec<Block<'a>>,
@@ -102,8 +101,8 @@ impl BlockId {
 }
 
 impl<'a> Fun<'a> {
-    pub fn new(params: Vec<TyRef>, is_extern: bool, name: &'a str, returns: Option<TyRef>) -> Fun<'a> {
-        Fun { blocks: vec![], params, is_extern, name, returns }
+    pub fn new(params: Vec<TyRef>, name: &'a str, returns: Option<TyRef>) -> Fun<'a> {
+        Fun { blocks: vec![], params, name, returns }
     }
     pub fn new_block(&mut self) -> BlockId {
         let id = BlockId(self.blocks.len() as u32);

@@ -31,7 +31,6 @@ pub fn lex<'a>(src: &'a str) -> Vec<Token> {
                     "if" => TokenKind::If,
                     "else" => TokenKind::Else,
                     "while" => TokenKind::While,
-                    "extern" => TokenKind::Extern,
                     "struct" => TokenKind::Struct,
                     _ => TokenKind::Ident,
                 };

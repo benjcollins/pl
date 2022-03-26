@@ -1,16 +1,14 @@
-use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Assign, Param, FnCall, TLD, Struct, StructField}};
+use std::collections::HashMap;
 
-pub fn parse<'a>(tokens: &[Token], src: &'a str) -> ParseResult<Vec<TLD<'a>>> {
+use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Assign, Param, FnCall, Struct, StructField, Program}};
+
+pub fn parse<'a>(tokens: &[Token], src: &'a str) -> ParseResult<Program<'a>> {
     let mut parser = Parser {
         index: 0,
         tokens,
         src,
     };
-    let mut tlds = vec![];
-    while parser.index < parser.tokens.len() {
-        tlds.push(parser.parse_tld()?)
-    }
-    Ok(tlds)
+    parser.parse_file()
 }
 
 struct Parser<'a, 'b> {
@@ -50,6 +48,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         } else {
             Err(self.unexpected_token())
         }
+    }
+    fn end(&self) -> bool {
+        self.index >= self.tokens.len()
     }
     fn unexpected_token(&self) -> ParseError {
         ParseError { token: self.tokens[self.index] }
@@ -241,8 +242,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.next();
         Ok(Block { stmts })
     }
-    fn parse_func(&mut self, is_extern: bool) -> ParseResult<Func<'a>> {
-        let name = self.eat_or_err(TokenKind::Ident)?.as_str(self.src);
+    fn parse_func(&mut self) -> ParseResult<Func<'a>> {
         self.eat_or_err(TokenKind::OpenBrace)?;
         let params = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| {
             let name = parser.eat_or_err(TokenKind::Ident)?.as_str(self.src);
@@ -261,11 +261,10 @@ impl<'a, 'b> Parser<'a, 'b> {
         } else {
             None
         };
-        Ok(Func { body, params, returns, name, is_extern })
+        Ok(Func { body, params, returns })
     }
     fn parse_struct(&mut self) -> ParseResult<Struct<'a>> {
-        let name = self.eat_or_err(TokenKind::Ident)?.as_str(self.src);
-        self.eat_or_err(TokenKind::OpenCurlyBrace);
+        self.eat_or_err(TokenKind::OpenCurlyBrace)?;
         let fields = self.parse_list(TokenKind::Comma, TokenKind::CloseCurlyBrace, |parser| {
             let name = parser.eat_or_err(TokenKind::Ident)?.as_str(self.src);
             parser.eat_or_err(TokenKind::Colon)?;
@@ -274,22 +273,26 @@ impl<'a, 'b> Parser<'a, 'b> {
         })?;
         Ok(Struct { fields })
     }
-    fn parse_tld(&mut self) -> ParseResult<TLD<'a>> {
-        Ok(match self.peek() {
-            TokenKind::Func => {
-                self.next();
-                TLD::Func(self.parse_func(false)?)
+    fn parse_file(&mut self) -> ParseResult<Program<'a>> {
+        let mut file = Program {
+            funcs: HashMap::new(),
+            structs: HashMap::new(),
+        };
+        while !self.end() {
+            match self.peek() {
+                TokenKind::Func => {
+                    self.next();
+                    let name = self.eat_or_err(TokenKind::Ident)?.as_str(self.src);
+                    file.funcs.insert(name, self.parse_func()?);
+                }
+                TokenKind::Struct => {
+                    self.next();
+                    let name = self.eat_or_err(TokenKind::Ident)?.as_str(self.src);
+                    file.structs.insert(name, self.parse_struct()?);
+                }
+                _ => Err(self.unexpected_token())?,
             }
-            TokenKind::Extern => {
-                self.next();
-                self.eat_or_err(TokenKind::Func)?;
-                TLD::Func(self.parse_func(true)?)
-            }
-            TokenKind::Struct => {
-                self.next();
-                TLD::Struct(self.parse_struct()?)
-            }
-            _ => Err(self.unexpected_token())?,
-        })
+        }
+        Ok(file)
     }
 }

@@ -99,10 +99,7 @@ pub fn compile_fun<W: Write>(fun: &Fun, output: W) -> io::Result<()> {
         output,
     };
     let params: Vec<_> = fun.params.iter().map(|param| (compiler.new_temp(), param)).collect();
-    if fun.is_extern {
-        write!(compiler.output, "export ")?;
-    }
-    write!(compiler.output, "function {} ${}(", fun.returns.as_ref().map_or("", |ty| ty_name(ty)), fun.name)?;
+    write!(compiler.output, "export function {} ${}(", fun.returns.as_ref().map_or("", |ty| ty_name(ty)), fun.name)?;
     let mut param_iter = params.iter();
     if let Some((temp, ty)) = param_iter.next() {
         write!(compiler.output, "{} {}", ty_name(ty), temp)?;

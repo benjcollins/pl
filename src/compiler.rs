@@ -4,7 +4,7 @@ struct Compiler<'a, 'b> {
     scope: Vec<Variable<'a>>,
     fun: mir::Fun<'a>,
     returns: Option<TyRef>,
-    fns: &'b [ast::Func<'a>],
+    program: &'b ast::Program<'b>,
 }
 
 #[derive(Debug, Clone)]
@@ -14,7 +14,7 @@ struct Variable<'a> {
     ty: TyRef,
 }
 
-pub fn compile_fun<'a>(fun: &ast::Func<'a>, fns: &[ast::Func<'a>]) -> Option<mir::Fun<'a>> {
+pub fn compile_fun<'a>(name: &'a str, fun: &ast::Func<'a>, program: &ast::Program<'a>) -> Option<mir::Fun<'a>> {
     let body = fun.body.as_ref()?;
     let returns = fun.returns.as_ref().map(|ty| compile_ty(&ty));
     let mut scope = vec![];
@@ -26,10 +26,10 @@ pub fn compile_fun<'a>(fun: &ast::Func<'a>, fns: &[ast::Func<'a>]) -> Option<mir
         scope.push(Variable { name: param.name, ty, stack_slot });
     }
     let mut compiler = Compiler {
-        fun: mir::Fun::new(params, fun.is_extern, fun.name, returns.clone()),
+        fun: mir::Fun::new(params, name, returns.clone()),
         scope,
         returns,
-        fns,
+        program,
     };
     let mut block_id = compiler.fun.new_block();
     compiler.compile_block(&body, &mut block_id);
@@ -234,16 +234,16 @@ impl<'a, 'b> Compiler<'a, 'b> {
         }
     }
     fn compile_fn_call(&mut self, fn_call: &ast::FnCall<'a>) -> (Vec<mir::Expr<'a>>, Option<TyRef>) {
-        let fun = self.fns.iter().find(|fun| fun.name == fn_call.name).unwrap();
-        if fn_call.args.len() != fun.params.len() {
+        let func = self.program.funcs.get(fn_call.name).unwrap();
+        if fn_call.args.len() != func.params.len() {
             panic!()
         }
-        let args = fn_call.args.iter().zip(&fun.params).map(|(arg, param)| {
+        let args = fn_call.args.iter().zip(&func.params).map(|(arg, param)| {
             let (expr, ty) = self.compile_expr(arg);
             unify(&ty, &compile_ty(&param.ty)).unwrap();
             expr
         }).collect();
-        (args, fun.returns.as_ref().map(compile_ty))
+        (args, func.returns.as_ref().map(compile_ty))
     }
     fn compile_arth_expr(&mut self, left: &ast::Expr<'a>, right: &ast::Expr<'a>, op: mir::BinaryOp) -> (mir::Expr<'a>, TyRef) {
         let (left_expr, left_ty) = self.compile_expr(left);

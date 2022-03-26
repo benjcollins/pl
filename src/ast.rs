@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct If<'a> {
     pub cond: Box<Expr<'a>>,
@@ -99,8 +101,6 @@ pub struct Func<'a> {
     pub params: Vec<Param<'a>>,
     pub returns: Option<Ty<'a>>,
     pub body: Option<Block<'a>>,
-    pub name: &'a str,
-    pub is_extern: bool,
 }
 
 pub struct Struct<'a> {
@@ -112,7 +112,7 @@ pub struct StructField<'a> {
     pub ty: Ty<'a>,
 }
 
-pub enum TLD<'a> {
-    Func(Func<'a>),
-    Struct(Struct<'a>),
+pub struct Program<'a> {
+    pub funcs: HashMap<&'a str, Func<'a>>,
+    pub structs: HashMap<&'a str, Struct<'a>>,
 }
