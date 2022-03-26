@@ -4,7 +4,7 @@ struct Compiler<'a, 'b> {
     scope: Vec<Variable<'a>>,
     fun: mir::Fun<'a>,
     returns: Option<TyRef>,
-    fns: &'b [ast::Fun<'a>],
+    fns: &'b [ast::Func<'a>],
 }
 
 #[derive(Debug, Clone)]
@@ -14,7 +14,7 @@ struct Variable<'a> {
     ty: TyRef,
 }
 
-pub fn compile_fun<'a>(fun: &ast::Fun<'a>, fns: &[ast::Fun<'a>]) -> Option<mir::Fun<'a>> {
+pub fn compile_fun<'a>(fun: &ast::Func<'a>, fns: &[ast::Func<'a>]) -> Option<mir::Fun<'a>> {
     let body = fun.body.as_ref()?;
     let returns = fun.returns.as_ref().map(|ty| compile_ty(&ty));
     let mut scope = vec![];
