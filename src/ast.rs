@@ -95,10 +95,24 @@ pub struct FnCall<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Fun<'a> {
+pub struct Func<'a> {
     pub params: Vec<Param<'a>>,
     pub returns: Option<Ty<'a>>,
     pub body: Option<Block<'a>>,
     pub name: &'a str,
     pub is_extern: bool,
+}
+
+pub struct Struct<'a> {
+    pub fields: Vec<StructField<'a>>,
+}
+
+pub struct StructField<'a> {
+    pub name: &'a str,
+    pub ty: Ty<'a>,
+}
+
+pub enum TLD<'a> {
+    Func(Func<'a>),
+    Struct(Struct<'a>),
 }
