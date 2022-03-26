@@ -1,16 +1,16 @@
-use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Assign, Param, FnCall, TLD, Struct, StructField}};
+use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Assign, Param, FnCall}};
 
-pub fn parse<'a>(tokens: &[Token], src: &'a str) -> ParseResult<Vec<TLD<'a>>> {
+pub fn parse<'a>(tokens: &[Token], src: &'a str) -> ParseResult<Vec<Func<'a>>> {
     let mut parser = Parser {
         index: 0,
         tokens,
         src,
     };
-    let mut tlds = vec![];
+    let mut fns = vec![];
     while parser.index < parser.tokens.len() {
-        tlds.push(parser.parse_tld()?)
+        fns.push(parser.parse_fn()?)
     }
-    Ok(tlds)
+    Ok(fns)
 }
 
 struct Parser<'a, 'b> {
@@ -241,8 +241,16 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.next();
         Ok(Block { stmts })
     }
-    fn parse_func(&mut self, is_extern: bool) -> ParseResult<Func<'a>> {
+    fn parse_fn(&mut self) -> ParseResult<Func<'a>> {
+        let is_extern = if self.peek() == TokenKind::Extern {
+            self.next();
+            true
+        } else {
+            false
+        };
+        self.eat_or_err(TokenKind::Func)?;
         let name = self.eat_or_err(TokenKind::Ident)?.as_str(self.src);
+
         self.eat_or_err(TokenKind::OpenBrace)?;
         let params = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| {
             let name = parser.eat_or_err(TokenKind::Ident)?.as_str(self.src);
@@ -262,34 +270,5 @@ impl<'a, 'b> Parser<'a, 'b> {
             None
         };
         Ok(Func { body, params, returns, name, is_extern })
-    }
-    fn parse_struct(&mut self) -> ParseResult<Struct<'a>> {
-        let name = self.eat_or_err(TokenKind::Ident)?.as_str(self.src);
-        self.eat_or_err(TokenKind::OpenCurlyBrace);
-        let fields = self.parse_list(TokenKind::Comma, TokenKind::CloseCurlyBrace, |parser| {
-            let name = parser.eat_or_err(TokenKind::Ident)?.as_str(self.src);
-            parser.eat_or_err(TokenKind::Colon)?;
-            let ty = parser.parse_ty()?;
-            Ok(StructField { name, ty })
-        })?;
-        Ok(Struct { fields })
-    }
-    fn parse_tld(&mut self) -> ParseResult<TLD<'a>> {
-        Ok(match self.peek() {
-            TokenKind::Func => {
-                self.next();
-                TLD::Func(self.parse_func(false)?)
-            }
-            TokenKind::Extern => {
-                self.next();
-                self.eat_or_err(TokenKind::Func)?;
-                TLD::Func(self.parse_func(true)?)
-            }
-            TokenKind::Struct => {
-                self.next();
-                TLD::Struct(self.parse_struct()?)
-            }
-            _ => Err(self.unexpected_token())?,
-        })
     }
 }
