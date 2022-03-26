@@ -24,7 +24,7 @@ pub enum TokenKind {
     Ampersand,
 
     Var,
-    Func,
+    Fn,
     Return,
     If,
     Else,
@@ -32,7 +32,6 @@ pub enum TokenKind {
     True,
     False,
     Extern,
-    Struct,
 
     OpenBrace,
     CloseBrace,

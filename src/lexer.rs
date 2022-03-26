@@ -24,7 +24,7 @@ pub fn lex<'a>(src: &'a str) -> Vec<Token> {
                 let content = &lexer.src[offset..lexer.offset];
                 let kind = match content {
                     "var" => TokenKind::Var,
-                    "func" => TokenKind::Func,
+                    "fn" => TokenKind::Fn,
                     "return" => TokenKind::Return,
                     "true" => TokenKind::True,
                     "false" => TokenKind::False,
@@ -32,7 +32,6 @@ pub fn lex<'a>(src: &'a str) -> Vec<Token> {
                     "else" => TokenKind::Else,
                     "while" => TokenKind::While,
                     "extern" => TokenKind::Extern,
-                    "struct" => TokenKind::Struct,
                     _ => TokenKind::Ident,
                 };
                 lexer.push_token(offset, kind);
