@@ -1,15 +1,19 @@
 use std::fmt;
 
-use crate::infer::{InferTyRef, Unify, unify};
+use crate::{infer::{InferTyRef, Unify, unify}};
 
-pub type TyRef = InferTyRef<Ty>;
+pub type TyRef<'a> = InferTyRef<Ty<'a>>;
 pub type IntTyRef = InferTyRef<IntTy>;
 
 #[derive(Debug, Clone)]
-pub enum Ty {
+pub enum Ty<'a> {
     Bool,
-    Ref(TyRef),
+    Ref(TyRef<'a>),
     Int(IntTyRef),
+    Struct {
+        name: &'a str,
+        tys: Vec<TyRef<'a>>,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -28,7 +32,7 @@ pub enum Size {
     B8, B16, B32
 }
 
-impl Unify for Ty {
+impl<'a> Unify for Ty<'a> {
     fn unify(a: &Ty, b: &Ty) -> Result<(), ()> {
         match (a, b) {
             (Ty::Bool, Ty::Bool) => (),
@@ -61,9 +65,9 @@ impl fmt::Display for IntTy {
     }
 }
 
-pub struct TyOption(pub Option<Ty>);
+pub struct TyOption<'a>(pub Option<Ty<'a>>);
 
-impl fmt::Display for TyOption {
+impl<'a> fmt::Display for TyOption<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.0 {
             Some(ty) => write!(f, "{}", ty),
@@ -83,12 +87,13 @@ impl fmt::Display for IntTyOption {
     }
 }
 
-impl fmt::Display for Ty {
+impl<'a> fmt::Display for Ty<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Ty::Bool => write!(f, "bool"),
             Ty::Ref(ty) => write!(f, "&{}", TyOption(ty.concrete())),
             Ty::Int(int_ty) => write!(f, "{}", IntTyOption(int_ty.concrete())),
+            Ty::Struct { .. } => todo!(),
         }
     }
 }

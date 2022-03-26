@@ -29,6 +29,16 @@ pub enum Expr<'a> {
         expr: Box<Expr<'a>>,
     },
     FnCall(FnCall<'a>),
+    InitStruct {
+        name: &'a str,
+        values: Vec<StructValue<'a>>
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructValue<'a> {
+    pub name: &'a str,
+    pub expr: Expr<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

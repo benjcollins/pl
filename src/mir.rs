@@ -25,14 +25,14 @@ pub enum Branch<'a> {
 #[derive(Debug, Clone)]
 pub struct Fun<'a> {
     pub name: &'a str,
-    pub params: Vec<TyRef>,
-    pub returns: Option<TyRef>,
+    pub params: Vec<TyRef<'a>>,
+    pub returns: Option<TyRef<'a>>,
     blocks: Vec<Block<'a>>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Stmt<'a> {
-    Alloc(TyRef),
+    Alloc(TyRef<'a>),
     Assign {
         assign: Assign,
         expr: Expr<'a>,
@@ -60,17 +60,18 @@ pub enum Expr<'a> {
     Bool(bool),
     Load {
         stack_slot: u32,
-        ty: TyRef,
+        ty: TyRef<'a>,
     },
     Ref(u32),
     Deref {
         expr: Box<Expr<'a>>,
-        ty: TyRef,
+        ty: TyRef<'a>,
     },
     FnCall {
         fn_call: FnCall<'a>,
-        result: TyRef,
-    }
+        result: TyRef<'a>,
+    },
+    InitStruct(Vec<Expr<'a>>)
 }
 
 #[derive(Debug, Clone)]
@@ -187,6 +188,7 @@ impl<'a> fmt::Display for Expr<'a> {
             Expr::Ref(stack_slot) => write!(f, "&${}", stack_slot),
             Expr::Deref { expr, ty } => write!(f, "*({}) {}", TyOption(ty.concrete()), expr),
             Expr::FnCall { .. } => write!(f, "call"),
+            Expr::InitStruct { .. } => todo!(),
         }
     }
 }

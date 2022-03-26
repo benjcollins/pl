@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Assign, Param, FnCall, Struct, StructField, Program}};
+use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Assign, Param, FnCall, Struct, StructField, Program, StructValue}};
 
 pub fn parse<'a>(tokens: &[Token], src: &'a str) -> ParseResult<Program<'a>> {
     let mut parser = Parser {
@@ -73,13 +73,24 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::Ampersand => self.parse_prefix(PrefixOp::Ref, Prec::Ref)?,
 
             TokenKind::Ident => {
-                let ident = self.next().as_str(self.src);
-                if self.peek() == TokenKind::OpenBrace {
-                    self.next();
-                    let args = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| parser.parse_expr(Prec::Bracket))?;
-                    Expr::FnCall(FnCall { name: ident, args })
-                } else {
-                    Expr::Ident(ident)
+                let name = self.next().as_str(self.src);
+                match self.peek() {
+                    TokenKind::OpenBrace => {
+                        self.next();
+                        let args = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| parser.parse_expr(Prec::Bracket))?;
+                        Expr::FnCall(FnCall { name, args })
+                    }
+                    TokenKind::OpenCurlyBrace => {
+                        self.next();
+                        let values = self.parse_list(TokenKind::Comma, TokenKind::CloseCurlyBrace, |parser| {
+                            let name = parser.eat_or_err(TokenKind::Ident)?.as_str(self.src);
+                            parser.eat_or_err(TokenKind::Colon)?;
+                            let expr = parser.parse_expr(Prec::Bracket)?;
+                            Ok(StructValue { name, expr })
+                        })?;
+                        Expr::InitStruct { name, values }
+                    }
+                    _ => Expr::Ident(name)
                 }
             }
             TokenKind::Integer => {

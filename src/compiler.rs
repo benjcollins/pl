@@ -1,9 +1,11 @@
+use std::collections::HashSet;
+
 use crate::{ast, mir, ty::{TyRef, Ty, IntTyRef, IntTy, Signedness, Size}, infer::{unify, InferTy}};
 
 struct Compiler<'a, 'b> {
     scope: Vec<Variable<'a>>,
     fun: mir::Fun<'a>,
-    returns: Option<TyRef>,
+    returns: Option<TyRef<'b>>,
     program: &'b ast::Program<'b>,
 }
 
@@ -11,7 +13,7 @@ struct Compiler<'a, 'b> {
 struct Variable<'a> {
     name: &'a str,
     stack_slot: u32,
-    ty: TyRef,
+    ty: TyRef<'a>,
 }
 
 pub fn compile_fun<'a>(name: &'a str, fun: &ast::Func<'a>, program: &ast::Program<'a>) -> Option<mir::Fun<'a>> {
@@ -36,7 +38,7 @@ pub fn compile_fun<'a>(name: &'a str, fun: &ast::Func<'a>, program: &ast::Progra
     Some(compiler.fun)
 }
 
-fn compile_ty(ty: &ast::Ty) -> TyRef {
+fn compile_ty<'a>(ty: &ast::Ty) -> TyRef<'a> {
     match ty {
         ast::Ty::Name(name) => match *name {
             "u8" => TyRef::known(Ty::Int(IntTyRef::known(IntTy { signedness: Signedness::Unsigned, size: Size::B8 }))),
@@ -55,7 +57,7 @@ fn compile_ty(ty: &ast::Ty) -> TyRef {
     }
 }
 
-fn deref_ty(ty: &TyRef) -> TyRef {
+fn deref_ty<'a>(ty: &TyRef<'a>) -> TyRef<'a> {
     match &*ty.infer_ty() {
         InferTy::Any => {
             let any_ty = TyRef::any();
@@ -230,6 +232,24 @@ impl<'a, 'b> Compiler<'a, 'b> {
                     name: fn_call.name,
                     args,
                 }, result: result.clone() }, result)
+            }
+            ast::Expr::InitStruct { name, values } => {
+                let structure = self.program.structs.get(name)?;
+                let done = HashSet::new();
+                let exprs = vec![];
+                let tys = vec![];
+                for value in values.iter() {
+                    if done.contains(value.name) {
+                        panic!()
+                    }
+                    done.insert(value.name);
+                    let field = structure.fields.iter().find(|field| field.name == value.name).unwrap();
+                    let (expr, ty) = self.compile_expr(&value.expr);
+                    unify(&ty, &compile_ty(&field.ty));
+                    tys.push(ty);
+                    exprs.push(expr);
+                }
+                (mir::Expr::InitStruct(exprs), TyRef::known(Ty::Struct { name, tys: () }))
             }
         }
     }

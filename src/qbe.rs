@@ -22,6 +22,7 @@ enum Value {
     },
     Pointer(Temp),
     Bool(Temp),
+    Struct(Temp),
 }
 
 fn size_bytes(ty: &TyRef) -> u32 {

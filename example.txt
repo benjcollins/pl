@@ -1,5 +1,10 @@
 func print_int(n: i32)
 
+struct Point {
+    x: i32,
+    y: i32
+}
+
 func main() {
     var a = 1;
     var b = 1;
