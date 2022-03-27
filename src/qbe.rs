@@ -1,6 +1,6 @@
 use std::{io::{Write, self}, fmt};
 
-use crate::{mir::{Func, BlockId, Branch, Stmt, Expr, Assign, BinaryOp, FnCall, Block}, ty::{TyRef, Ty, Size, Signedness}, ast::{self, Program}, compiler};
+use crate::{mir::{Func, BlockId, Branch, Stmt, Expr, Assign, BinaryOp, FnCall, Block}, ty::{TyRef, Ty, Size, Signedness}, ast, compiler};
 
 struct Compiler<W: Write> {
     stack_slots: Vec<Temp>,
@@ -124,7 +124,7 @@ pub fn compile_fun<W: Write>(func: &Func, output: W) -> io::Result<()> {
     Ok(())
 }
 
-pub fn compile_struct<'f, W: Write>(name: &str, structure: &ast::Struct, program: &Program<'f>, mut output: W) -> io::Result<()> {
+pub fn compile_struct<'f, W: Write>(name: &str, structure: &ast::Struct, program: &ast::Program<'f>, mut output: W) -> io::Result<()> {
     write!(output, "type :{} = {{ ", name)?;
     for field in &structure.fields {
         write!(output, "{}, ", TyName(&compiler::compile_ty(&field.ty, program)))?;
@@ -201,7 +201,7 @@ impl<W: Write> Compiler<W> {
     }
     fn compile_expr(&mut self, expr: &Expr) -> io::Result<Temp> {
         Ok(match expr {
-            Expr::Int { value, ty } => {
+            Expr::Int(value) => {
                 let temp = self.new_temp();
                 writeln!(self.output, "  {} =w copy {}", temp, value)?;
                 temp

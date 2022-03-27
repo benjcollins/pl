@@ -226,7 +226,7 @@ impl<'s, 'c> Compiler<'s, 'c> {
             ast::Expr::Integer(value) => {
                 let int_ty = IntTyRef::any();
                 let value = value.parse().unwrap();
-                (mir::Expr::Int { value, ty: int_ty.clone() }, TyRef::known(Ty::Int(int_ty)))
+                (mir::Expr::Int(value), TyRef::known(Ty::Int(int_ty)))
             }
             ast::Expr::Bool(value) =>  {
                 (mir::Expr::Bool(*value), TyRef::known(Ty::Bool))

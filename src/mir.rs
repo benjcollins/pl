@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{ty::{TyRef, IntTyRef, TyOption, IntTyOption}};
+use crate::{ty::{TyRef, IntTyRef, TyOption}};
 
 #[derive(Debug, Clone)]
 pub struct Block<'a> {
@@ -49,10 +49,7 @@ pub enum Assign {
 
 #[derive(Debug, Clone)]
 pub enum Expr<'a> {
-    Int {
-        value: u32,
-        ty: IntTyRef,
-    },
+    Int(i32),
     Binary {
         left: Box<Expr<'a>>,
         right: Box<Expr<'a>>,
@@ -157,7 +154,7 @@ impl<'a> fmt::Display for Stmt<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Stmt::Alloc(ty) => write!(f, "alloc({})", TyOption(ty.concrete())),
-            Stmt::Assign { assign, expr, ty } => write!(f, "{} = {}", assign, expr),
+            Stmt::Assign { assign, expr, .. } => write!(f, "{} = {}", assign, expr),
             Stmt::FnCall { .. } => write!(f, "call"),
         }
     }
@@ -175,7 +172,7 @@ impl fmt::Display for Assign {
 impl<'a> fmt::Display for Expr<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Int { value, ty } => write!(f, "{}{}", value, IntTyOption(ty.concrete())),
+            Expr::Int(value) => write!(f, "{}", value),
             Expr::Binary { left, right, op, .. } => write!(f, "({} {} {})", left, op, right),
             Expr::Bool(value) => write!(f, "{}", if *value { "true" } else { "false" }),
             Expr::Load { stack_slot, ty } => write!(f, "({}) ${}", TyOption(ty.concrete()), stack_slot),
