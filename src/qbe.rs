@@ -300,11 +300,12 @@ impl<W: Write> Compiler<W> {
 
             let src_off = self.new_temp();
             writeln!(self.output, "  {} =l add {}, {}", src_off, src, offset)?;
+            let value = self.load(ty, Value::Temp(src_off))?;
             
             let dest_off = self.new_temp();
             writeln!(self.output, "  {} =l add {}, {}", dest_off, dest, offset)?;
             
-            self.store(Value::Temp(dest_off), ty, src_off)?;
+            self.store(Value::Temp(value), ty, dest_off)?;
             offset += size_bytes(ty);
         }
         Ok(())
