@@ -245,14 +245,14 @@ impl<W: Write> Compiler<W> {
             }
             Expr::Load { stack_slot, ty } => {
                 let temp = self.stack_slots[*stack_slot as usize];
-                self.load(ty, Value::Temp(temp))?
+                Value::Temp(self.load(ty, Value::Temp(temp))?)
             }
             Expr::Ref(stack_slot) => {
                 Value::Temp(self.stack_slots[*stack_slot as usize])
             }
             Expr::Deref { expr, ty } => {
                 let temp = self.compile_expr(expr)?;
-                self.load(ty, temp)?
+                Value::Temp(self.load(ty, temp)?)
             }
             Expr::FnCall { fn_call, result } => {
                 let temp = self.new_temp();
@@ -331,12 +331,12 @@ impl<W: Write> Compiler<W> {
         }
         Ok(())
     }
-    fn load(&mut self, ty: &TyRef, addr: Value) -> io::Result<Value> {
+    fn load(&mut self, ty: &TyRef, addr: Value) -> io::Result<Temp> {
         Ok(match ty.concrete().unwrap() {
             Ty::Bool => {
                 let temp = self.new_temp();
                 writeln!(self.output, "  {} =w loadb {}", temp, addr)?;
-                Value::Temp(temp)
+                temp
             }
             Ty::Int(int_ty) => {
                 let temp = self.new_temp();
@@ -350,17 +350,17 @@ impl<W: Write> Compiler<W> {
                     (Signedness::Unsigned, Size::B32) => "loaduw",
                 };
                 writeln!(self.output, "  {} =w {} {}", temp, op, addr)?;
-                Value::Temp(temp)
+                temp
             }
             Ty::Ref(_) => {
                 let temp = self.new_temp();
                 writeln!(self.output, "  {} =l loadl {}", temp, addr)?;
-                Value::Temp(temp)
+                temp
             }
             Ty::Struct { tys, .. } => {
                 let temp = self.alloc_ty(ty)?;
                 self.copy_struct(addr, temp, tys)?;
-                Value::Temp(temp)
+                temp
             }
         })
     }
