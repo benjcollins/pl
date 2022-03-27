@@ -19,6 +19,7 @@ struct Parser<'a, 'b> {
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 enum Prec {
+    Dot,
     Ref,
     Product,
     Sum,
@@ -121,6 +122,11 @@ impl<'a, 'b> Parser<'a, 'b> {
                 TokenKind::ForwardSlash if prec >= Prec::Product => self.parse_infix(left, InfixOp::Divide, Prec::Product)?,
                 TokenKind::OpenAngleBrace if prec >= Prec::Compare => self.parse_infix(left, InfixOp::LessThan, Prec::Compare)?,
                 TokenKind::CloseAngleBrace if prec >= Prec::Compare => self.parse_infix(left, InfixOp::GreaterThan, Prec::Compare)?,
+                TokenKind::Dot if prec >= Prec::Dot => {
+                    self.next();
+                    let name = self.eat_or_err(TokenKind::Ident)?.as_str(self.src);
+                    Expr::Property { expr: Box::new(left), name }
+                }
                 _ => break
             }
         }

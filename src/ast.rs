@@ -19,6 +19,10 @@ pub enum Expr<'a> {
     Integer(&'a str),
     Bool(bool),
     Ident(&'a str),
+    Property {
+        expr: Box<Expr<'a>>,
+        name: &'a str,
+    },
     Infix {
         left: Box<Expr<'a>>,
         right: Box<Expr<'a>>,

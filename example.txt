@@ -6,7 +6,7 @@ struct Point {
     y: i32
 }
 
-func main(): Point {
+func main() {
     var p = Point { x: 2, y: 3 };
     print_point(&p);
 }

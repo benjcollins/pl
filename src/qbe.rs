@@ -1,6 +1,6 @@
 use std::{io::{Write, self}, fmt};
 
-use crate::{mir::{Func, BlockId, Branch, Stmt, Expr, Assign, BinaryOp, FnCall, Block}, ty::{TyRef, Ty, Size, Signedness}, ast, compiler};
+use crate::{mir::{Func, BlockId, Branch, Stmt, Expr, Assign, BinaryOp, FuncCall, Block}, ty::{TyRef, Ty, Size, Signedness}, ast, compiler};
 
 struct Compiler<W: Write> {
     stack_slots: Vec<Temp>,
@@ -194,7 +194,7 @@ impl<W: Write> Compiler<W> {
                 let addr = self.compile_assign(assign)?;
                 self.store(temp, ty, addr)?;
             }
-            Stmt::FnCall(fn_call) => {
+            Stmt::FuncCall(fn_call) => {
                 self.compile_fn_call(fn_call, None)?;
             }
         };
@@ -276,7 +276,7 @@ impl<W: Write> Compiler<W> {
             }
         })
     }
-    fn compile_fn_call(&mut self, fn_call: &FnCall, returns: Option<(Temp, &TyRef)>) -> io::Result<()> {
+    fn compile_fn_call(&mut self, fn_call: &FuncCall, returns: Option<(Temp, &TyRef)>) -> io::Result<()> {
         let values: Vec<_> = fn_call.args.iter().map(|arg| (self.compile_expr(&arg.expr).unwrap(), &arg.ty)).collect();
         write!(self.output, "  ")?;
         if let Some((temp, ty)) = returns {

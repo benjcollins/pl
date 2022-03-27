@@ -16,12 +16,12 @@ pub enum TokenKind {
     ForwardSlash,
     OpenAngleBrace,
     CloseAngleBrace,
-
     Equals,
     Comma,
     Colon,
     Semicolon,
     Ampersand,
+    Dot,
 
     Var,
     Func,

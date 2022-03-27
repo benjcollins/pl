@@ -38,7 +38,7 @@ pub enum Stmt<'a> {
         expr: Expr<'a>,
         ty: TyRef<'a>,
     },
-    FnCall(FnCall<'a>),
+    FuncCall(FuncCall<'a>),
 }
 
 #[derive(Debug, Clone)]
@@ -67,7 +67,7 @@ pub enum Expr<'a> {
         ty: TyRef<'a>,
     },
     FnCall {
-        fn_call: FnCall<'a>,
+        fn_call: FuncCall<'a>,
         result: TyRef<'a>,
     },
     InitStruct(Vec<StructValue<'a>>),
@@ -80,7 +80,7 @@ pub struct StructValue<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct FnCall<'a> {
+pub struct FuncCall<'a> {
     pub name: &'a str,
     pub args: Vec<Arg<'a>>,
 }
@@ -101,28 +101,9 @@ pub enum BinaryOp {
     GreaterThan,
 }
 
-pub struct BlockIdIter {
-    index: u32,
-    len: u32,
-}
-
 impl BlockId {
     pub fn id(&self) -> u32 {
         self.0
-    }
-}
-
-impl Iterator for BlockIdIter {
-    type Item = BlockId;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.len {
-            let block_id = BlockId(self.index);
-            self.index += 1;
-            Some(block_id)
-        } else {
-            None
-        }
     }
 }
 
@@ -155,7 +136,7 @@ impl<'a> fmt::Display for Stmt<'a> {
         match self {
             Stmt::Alloc(ty) => write!(f, "alloc({})", TyOption(ty.concrete())),
             Stmt::Assign { assign, expr, .. } => write!(f, "{} = {}", assign, expr),
-            Stmt::FnCall { .. } => write!(f, "call"),
+            Stmt::FuncCall { .. } => write!(f, "call"),
         }
     }
 }

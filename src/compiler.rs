@@ -167,7 +167,7 @@ impl<'s, 'c> Compiler<'s, 'c> {
                     if ty.is_some() {
                         panic!()
                     }
-                    self.push_stmt(*block_id, mir::Stmt::FnCall(mir::FnCall {
+                    self.push_stmt(*block_id, mir::Stmt::FuncCall(mir::FuncCall {
                         name: fn_call.name,
                         args,
                     }))
@@ -266,7 +266,7 @@ impl<'s, 'c> Compiler<'s, 'c> {
             ast::Expr::FnCall(fn_call) => {
                 let (args, ty) = self.compile_fn_call(fn_call);
                 let result = ty.unwrap();
-                (mir::Expr::FnCall { fn_call: mir::FnCall {
+                (mir::Expr::FnCall { fn_call: mir::FuncCall {
                     name: fn_call.name,
                     args,
                 }, result: result.clone() }, result)
@@ -276,12 +276,12 @@ impl<'s, 'c> Compiler<'s, 'c> {
                 let mut done = HashSet::new();
                 let mut mir_values = vec![];
                 let mut tys = vec![];
-                for value in values.iter() {
-                    if done.contains(value.name) {
+                for field in structure.fields.iter() {
+                    if done.contains(field.name) {
                         panic!()
                     }
-                    done.insert(value.name);
-                    let field = structure.fields.iter().find(|field| field.name == value.name).unwrap();
+                    done.insert(field.name);
+                    let value = values.iter().find(|value| value.name == field.name).unwrap();
                     let (expr, ty) = self.compile_expr(&value.expr);
                     let field_ty = compile_ty(&field.ty, self.program);
                     unify(&ty, &field_ty).unwrap();
@@ -290,6 +290,7 @@ impl<'s, 'c> Compiler<'s, 'c> {
                 }
                 (mir::Expr::InitStruct(mir_values), TyRef::known(Ty::Struct { name, tys }))
             }
+            ast::Expr::Property { expr, name } => todo!(),
         }
     }
     fn compile_fn_call(&mut self, fn_call: &ast::FnCall<'s>) -> (Vec<mir::Arg<'s>>, Option<TyRef<'s>>) {
