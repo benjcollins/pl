@@ -17,12 +17,15 @@ fn main() {
     let mut func_mirs = vec![];
     for (name, func_ast) in &program.funcs {
         if let Some(func_mir) = compiler::compile_fun(name, func_ast, &program) {
-            println!("{}", func_mir);
+            // println!("{}", func_mir);
             func_mirs.push(func_mir);
         }
     }
 
     let file = File::create("output.ssa").unwrap();
+    for (name, structure) in &program.structs {
+        qbe::compile_struct(name, structure, &program, &file).unwrap();
+    }
     for func_mir in &func_mirs {
         qbe::compile_fun(func_mir, &file).unwrap();
     }

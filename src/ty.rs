@@ -33,11 +33,12 @@ pub enum Size {
 }
 
 impl<'a> Unify for Ty<'a> {
-    fn unify(a: &Ty, b: &Ty) -> Result<(), ()> {
+    fn unify(a: &Ty<'a>, b: &Ty<'a>) -> Result<(), ()> {
         match (a, b) {
             (Ty::Bool, Ty::Bool) => (),
             (Ty::Ref(a), Ty::Ref(b)) => _ = unify(&a, &b)?,
             (Ty::Int(a), Ty::Int(b)) => _ = unify(&a, &b)?,
+            (Ty::Struct { name: a, .. }, Ty::Struct { name: b, .. }) if a == b => (),
             _ => Err(())?,
         };
         Ok(())

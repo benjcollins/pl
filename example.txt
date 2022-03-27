@@ -1,19 +1,12 @@
 func print_int(n: i32)
+func print_point(p: &Point)
 
 struct Point {
     x: i32,
     y: i32
 }
 
-func main() {
-    var a = 1;
-    var b = 1;
-    var n: i32 = 0;
-    while n < 10 {
-        var c = a;
-        a = a + b;
-        b = c;
-        n = n + 1;
-        print_int(b);
-    }
+func main(): Point {
+    var p = Point { x: 2, y: 3 };
+    print_point(&p);
 }

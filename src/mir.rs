@@ -23,7 +23,7 @@ pub enum Branch<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Fun<'a> {
+pub struct Func<'a> {
     pub name: &'a str,
     pub params: Vec<TyRef<'a>>,
     pub returns: Option<TyRef<'a>>,
@@ -36,6 +36,7 @@ pub enum Stmt<'a> {
     Assign {
         assign: Assign,
         expr: Expr<'a>,
+        ty: TyRef<'a>,
     },
     FnCall(FnCall<'a>),
 }
@@ -55,6 +56,7 @@ pub enum Expr<'a> {
     Binary {
         left: Box<Expr<'a>>,
         right: Box<Expr<'a>>,
+        ty: IntTyRef,
         op: BinaryOp,
     },
     Bool(bool),
@@ -71,13 +73,25 @@ pub enum Expr<'a> {
         fn_call: FnCall<'a>,
         result: TyRef<'a>,
     },
-    InitStruct(Vec<Expr<'a>>)
+    InitStruct(Vec<StructValue<'a>>),
+}
+
+#[derive(Debug, Clone)]
+pub struct StructValue<'a> {
+    pub expr: Expr<'a>,
+    pub ty: TyRef<'a>,
 }
 
 #[derive(Debug, Clone)]
 pub struct FnCall<'a> {
     pub name: &'a str,
-    pub args: Vec<Expr<'a>>,
+    pub args: Vec<Arg<'a>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Arg<'a> {
+    pub expr: Expr<'a>,
+    pub ty: TyRef<'a>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -101,9 +115,9 @@ impl BlockId {
     }
 }
 
-impl<'a> Fun<'a> {
-    pub fn new(params: Vec<TyRef>, name: &'a str, returns: Option<TyRef>) -> Fun<'a> {
-        Fun { blocks: vec![], params, name, returns }
+impl<'a> Func<'a> {
+    pub fn new(name: &'a str) -> Func<'a> {
+        Func { blocks: vec![], params: vec![], name, returns: None }
     }
     pub fn new_block(&mut self) -> BlockId {
         let id = BlockId(self.blocks.len() as u32);
@@ -113,11 +127,17 @@ impl<'a> Fun<'a> {
     pub fn get_block_mut(&mut self, id: BlockId) -> &mut Block<'a> {
         &mut self.blocks[id.0 as usize]
     }
-    pub fn get_block(&self, id: BlockId) -> &Block {
+    pub fn get_block(&self, id: BlockId) -> &Block<'a> {
         &self.blocks[id.0 as usize]
     }
     pub fn blocks(&self) -> BlockIdIter {
         BlockIdIter { index: 0, len: self.blocks.len() as u32 }
+    }
+    pub fn returns(&mut self, ty: TyRef<'a>) {
+        self.returns = Some(ty)
+    }
+    pub fn add_param(&mut self, ty: TyRef<'a>) {
+        self.params.push(ty)
     }
 }
 
@@ -135,7 +155,7 @@ impl Iterator for BlockIdIter {
     }
 }
 
-impl<'a> fmt::Display for Fun<'a> {
+impl<'a> fmt::Display for Func<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "fn {}()", self.name)?;
         if let Some(ty) = &self.returns {
@@ -163,7 +183,7 @@ impl<'a> fmt::Display for Stmt<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Stmt::Alloc(ty) => write!(f, "alloc({})", TyOption(ty.concrete())),
-            Stmt::Assign { assign, expr } => write!(f, "{} = {}", assign, expr),
+            Stmt::Assign { assign, expr, ty } => write!(f, "{} = {}", assign, expr),
             Stmt::FnCall { .. } => write!(f, "call"),
         }
     }
@@ -182,7 +202,7 @@ impl<'a> fmt::Display for Expr<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Expr::Int { value, ty } => write!(f, "{}{}", value, IntTyOption(ty.concrete())),
-            Expr::Binary { left, right, op } => write!(f, "({} {} {})", left, op, right),
+            Expr::Binary { left, right, op, ty } => write!(f, "({} {} {})", left, op, right),
             Expr::Bool(value) => write!(f, "{}", if *value { "true" } else { "false" }),
             Expr::Load { stack_slot, ty } => write!(f, "({}) ${}", TyOption(ty.concrete()), stack_slot),
             Expr::Ref(stack_slot) => write!(f, "&${}", stack_slot),
