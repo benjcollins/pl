@@ -1,11 +1,10 @@
 use std::{io::{Write, self}, fmt};
 
-use crate::{mir::{Func, BlockId, Branch, Stmt, Expr, Assign, BinaryOp, FnCall}, ty::{TyRef, Ty, Size, Signedness}, ast::{self, Program}, compiler};
+use crate::{mir::{Func, BlockId, Branch, Stmt, Expr, Assign, BinaryOp, FnCall, Block}, ty::{TyRef, Ty, Size, Signedness}, ast::{self, Program}, compiler};
 
-struct Compiler<'f, W: Write> {
+struct Compiler<W: Write> {
     stack_slots: Vec<Temp>,
     temp_count: u32,
-    func: &'f Func<'f>,
     output: W,
 }
 
@@ -91,11 +90,10 @@ impl fmt::Display for Label {
     }
 }
 
-pub fn compile_fun<'f, W: Write>(func: &'f Func<'f>, output: W) -> io::Result<()> {
+pub fn compile_fun<W: Write>(func: &Func, output: W) -> io::Result<()> {
     let mut compiler = Compiler {
         stack_slots: vec![],
         temp_count: 0,
-        func,
         output,
     };
     let params: Vec<_> = func.params.iter().map(|param| (compiler.new_temp(), param)).collect();
@@ -118,8 +116,9 @@ pub fn compile_fun<'f, W: Write>(func: &'f Func<'f>, output: W) -> io::Result<()
         compiler.stack_slots.push(addr);
         compiler.store(*temp, ty, addr)?;
     }
-    for block_id in func.blocks() {
-        compiler.compile_block(block_id)?;
+    for (id, block) in func.blocks.iter().enumerate() {
+        writeln!(compiler.output, "{}", Label::from_block(BlockId(id as u32)))?;
+        compiler.compile_block(block)?;
     }
     writeln!(compiler.output, "}}\n")?;
     Ok(())
@@ -133,10 +132,8 @@ pub fn compile_struct<'f, W: Write>(name: &str, structure: &ast::Struct, program
     writeln!(output, "}}\n")
 }
 
-impl<'f, W: Write> Compiler<'f, W> {
-    fn compile_block(&mut self, block_id: BlockId) -> io::Result<()> {
-        let block = self.func.get_block(block_id);
-        writeln!(self.output, "{}", Label::from_block(block_id))?;
+impl<W: Write> Compiler<W> {
+    fn compile_block<'s>(&mut self, block: &Block<'s>) -> io::Result<()> {
         for stmt in &block.stmts {
             self.compile_stmt(stmt)?;
         }

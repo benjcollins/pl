@@ -9,7 +9,7 @@ pub struct Block<'a> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct BlockId(u32);
+pub struct BlockId(pub u32);
 
 #[derive(Debug, Clone)]
 pub enum Branch<'a> {
@@ -27,7 +27,7 @@ pub struct Func<'a> {
     pub name: &'a str,
     pub params: Vec<TyRef<'a>>,
     pub returns: Option<TyRef<'a>>,
-    blocks: Vec<Block<'a>>,
+    pub blocks: Vec<Block<'a>>,
 }
 
 #[derive(Debug, Clone)]
@@ -115,32 +115,6 @@ impl BlockId {
     }
 }
 
-impl<'a> Func<'a> {
-    pub fn new(name: &'a str) -> Func<'a> {
-        Func { blocks: vec![], params: vec![], name, returns: None }
-    }
-    pub fn new_block(&mut self) -> BlockId {
-        let id = BlockId(self.blocks.len() as u32);
-        self.blocks.push(Block { stmts: vec![], branch: Branch::Return(None) });
-        id
-    }
-    pub fn get_block_mut(&mut self, id: BlockId) -> &mut Block<'a> {
-        &mut self.blocks[id.0 as usize]
-    }
-    pub fn get_block(&self, id: BlockId) -> &Block<'a> {
-        &self.blocks[id.0 as usize]
-    }
-    pub fn blocks(&self) -> BlockIdIter {
-        BlockIdIter { index: 0, len: self.blocks.len() as u32 }
-    }
-    pub fn returns(&mut self, ty: TyRef<'a>) {
-        self.returns = Some(ty)
-    }
-    pub fn add_param(&mut self, ty: TyRef<'a>) {
-        self.params.push(ty)
-    }
-}
-
 impl Iterator for BlockIdIter {
     type Item = BlockId;
 
@@ -162,9 +136,9 @@ impl<'a> fmt::Display for Func<'a> {
             write!(f, " {}", TyOption(ty.concrete()))?;
         }
         writeln!(f, "")?;
-        for block in self.blocks() {
-            writeln!(f, "b{}:", block.id())?;
-            write!(f, "{}", self.get_block(block))?;
+        for (id, block) in self.blocks.iter().enumerate() {
+            writeln!(f, "b{}:", id)?;
+            write!(f, "{}", block)?;
         }
         Ok(())
     }
@@ -202,7 +176,7 @@ impl<'a> fmt::Display for Expr<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Expr::Int { value, ty } => write!(f, "{}{}", value, IntTyOption(ty.concrete())),
-            Expr::Binary { left, right, op, ty } => write!(f, "({} {} {})", left, op, right),
+            Expr::Binary { left, right, op, .. } => write!(f, "({} {} {})", left, op, right),
             Expr::Bool(value) => write!(f, "{}", if *value { "true" } else { "false" }),
             Expr::Load { stack_slot, ty } => write!(f, "({}) ${}", TyOption(ty.concrete()), stack_slot),
             Expr::Ref(stack_slot) => write!(f, "&${}", stack_slot),
