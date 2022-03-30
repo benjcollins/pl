@@ -19,7 +19,7 @@ pub enum Expr<'a> {
     Integer(&'a str),
     Bool(bool),
     Ident(&'a str),
-    Property {
+    Field {
         expr: Box<Expr<'a>>,
         name: &'a str,
     },

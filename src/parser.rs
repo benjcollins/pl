@@ -125,7 +125,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 TokenKind::Dot if prec >= Prec::Dot => {
                     self.next();
                     let name = self.eat_or_err(TokenKind::Ident)?.as_str(self.src);
-                    Expr::Property { expr: Box::new(left), name }
+                    Expr::Field { expr: Box::new(left), name }
                 }
                 _ => break
             }

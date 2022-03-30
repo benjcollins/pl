@@ -51,6 +51,7 @@ pub fn lex<'a>(src: &'a str) -> Vec<Token> {
             ':' => lexer.single_char_token(TokenKind::Colon),
             ';' => lexer.single_char_token(TokenKind::Semicolon),
             '&' => lexer.single_char_token(TokenKind::Ampersand),
+            '.' => lexer.single_char_token(TokenKind::Dot),
             _ => panic!(),
         }
     }

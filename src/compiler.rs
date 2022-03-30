@@ -290,7 +290,7 @@ impl<'s, 'c> Compiler<'s, 'c> {
                 }
                 (mir::Expr::InitStruct(mir_values), TyRef::known(Ty::Struct { name, tys }))
             }
-            ast::Expr::Property { expr, name } => todo!(),
+            ast::Expr::Field { .. } => todo!(),
         }
     }
     fn compile_fn_call(&mut self, fn_call: &ast::FnCall<'s>) -> (Vec<mir::Arg<'s>>, Option<TyRef<'s>>) {
