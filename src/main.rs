@@ -9,14 +9,15 @@ mod infer;
 mod compiler;
 mod mir;
 mod qbe;
+mod symbols;
 
 fn main() {
     let src = include_str!("../example.txt");
     let tokens = lexer::lex(src);
-    let program = parser::parse(&tokens, src).unwrap();
+    let (program, symbols) = parser::parse(&tokens, src).unwrap();
     let mut func_mirs = vec![];
     for (name, func_ast) in &program.funcs {
-        if let Some(func_mir) = compiler::compile_fun(name, func_ast, &program) {
+        if let Some(func_mir) = compiler::compile_fun(*name, func_ast, &program, &symbols) {
             // println!("{}", func_mir);
             func_mirs.push(func_mir);
         }
@@ -24,10 +25,10 @@ fn main() {
 
     let file = File::create("output.ssa").unwrap();
     for (name, structure) in &program.structs {
-        qbe::compile_struct(name, structure, &program, &file).unwrap();
+        qbe::compile_struct(*name, structure, &program, &file, &symbols).unwrap();
     }
     for func_mir in &func_mirs {
-        qbe::compile_fun(func_mir, &file).unwrap();
+        qbe::compile_fun(func_mir, &file, &symbols).unwrap();
     }
     Command::new("qbe/obj/qbe").args(["output.ssa", "-o", "output.S"]).status().unwrap();
     Command::new("gcc").args(["-o", "output", "main.c", "output.S"]).status().unwrap();

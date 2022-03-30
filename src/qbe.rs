@@ -1,11 +1,12 @@
 use std::{io::{Write, self}, fmt};
 
-use crate::{mir::{Func, BlockId, Branch, Stmt, Expr, Assign, BinaryOp, FuncCall, Block}, ty::{TyRef, Ty, Size, Signedness}, ast, compiler};
+use crate::{mir::{Func, BlockId, Branch, Stmt, Expr, Assign, BinaryOp, FuncCall, Block}, ty::{TyRef, Ty, Size, Signedness}, ast, compiler, symbols::{Symbols, Symbol}};
 
-struct Compiler<W: Write> {
+struct Compiler<'a, W: Write> {
     stack_slots: Vec<Temp>,
     temp_count: u32,
     output: W,
+    symbols: &'a Symbols<'a>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -13,7 +14,7 @@ struct Temp(u32);
 
 enum Value {
     Temp(Temp),
-    Const(i32),
+    Const(i64),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -64,15 +65,24 @@ fn align_bytes(ty: &TyRef) -> u32 {
     }
 }
 
-struct TyName<'a, 'b>(&'a TyRef<'b>);
+struct TyName<'a> {
+    ty: &'a TyRef,
+    symbols: &'a Symbols<'a>,
+}
 
-impl<'a, 'b> fmt::Display for TyName<'a, 'b> {
+impl<'a> TyName<'a> {
+    fn new(ty: &'a TyRef, symbols: &'a Symbols<'a>) -> TyName<'a> {
+        TyName { ty, symbols }
+    }
+}
+
+impl<'a> fmt::Display for TyName<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0.concrete().unwrap() {
+        match self.ty.concrete().unwrap() {
             Ty::Bool => write!(f, "w"),
             Ty::Ref(_) => write!(f, "l"),
             Ty::Int(_) => write!(f, "w"),
-            Ty::Struct { name, .. } => write!(f, ":{}", name),
+            Ty::Struct { name, .. } => write!(f, ":{}", self.symbols.get_str(name)),
         }
     }
 }
@@ -104,23 +114,24 @@ impl fmt::Display for Label {
     }
 }
 
-pub fn compile_fun<W: Write>(func: &Func, output: W) -> io::Result<()> {
+pub fn compile_fun<'a, W: Write>(func: &Func, output: W, symbols: &'a Symbols<'a>) -> io::Result<()> {
     let mut compiler = Compiler {
         stack_slots: vec![],
         temp_count: 0,
         output,
+        symbols,
     };
     let params: Vec<_> = func.params.iter().map(|param| (compiler.new_temp(), param)).collect();
     write!(compiler.output, "export function ")?;
     if let Some(ty) = &func.returns {
-        write!(compiler.output, "{} ", TyName(ty))?;
+        write!(compiler.output, "{} ", TyName { ty, symbols })?;
     }
-    write!(compiler.output, "${}(", func.name)?;
+    write!(compiler.output, "${}(", symbols.get_str(func.name))?;
     let mut param_iter = params.iter();
     if let Some((temp, ty)) = param_iter.next() {
-        write!(compiler.output, "{} {}", TyName(ty), temp)?;
+        write!(compiler.output, "{} {}", TyName::new(ty, symbols), temp)?;
         for (temp, ty) in param_iter {
-            write!(compiler.output, ", {} {}", TyName(ty), temp)?;
+            write!(compiler.output, ", {} {}", TyName::new(ty, symbols), temp)?;
         }
     }
     writeln!(compiler.output, ") {{")?;
@@ -138,16 +149,16 @@ pub fn compile_fun<W: Write>(func: &Func, output: W) -> io::Result<()> {
     Ok(())
 }
 
-pub fn compile_struct<'f, W: Write>(name: &str, structure: &ast::Struct, program: &ast::Program<'f>, mut output: W) -> io::Result<()> {
-    write!(output, "type :{} = {{ ", name)?;
+pub fn compile_struct<W: Write>(name: Symbol, structure: &ast::Struct, program: &ast::Program, mut output: W, symbols: &Symbols) -> io::Result<()> {
+    write!(output, "type :{} = {{ ", symbols.get_str(name))?;
     for field in &structure.fields {
-        write!(output, "{}, ", TyName(&compiler::compile_ty(&field.ty, program)))?;
+        write!(output, "{}, ", TyName::new(&compiler::compile_ty(&field.ty, program, symbols), symbols))?;
     }
     writeln!(output, "}}\n")
 }
 
-impl<W: Write> Compiler<W> {
-    fn compile_block<'s>(&mut self, block: &Block<'s>) -> io::Result<()> {
+impl<'a, W: Write> Compiler<'a, W> {
+    fn compile_block<'s>(&mut self, block: &Block) -> io::Result<()> {
         for stmt in &block.stmts {
             self.compile_stmt(stmt)?;
         }
@@ -280,14 +291,14 @@ impl<W: Write> Compiler<W> {
         let values: Vec<_> = fn_call.args.iter().map(|arg| (self.compile_expr(&arg.expr).unwrap(), &arg.ty)).collect();
         write!(self.output, "  ")?;
         if let Some((temp, ty)) = returns {
-            write!(self.output, "  {} ={} ", temp, TyName(ty))?;
+            write!(self.output, "  {} ={} ", temp, TyName::new(ty, self.symbols))?;
         }
-        write!(self.output, "call ${}(", fn_call.name)?;
+        write!(self.output, "call ${}(", self.symbols.get_str(fn_call.name))?;
         let mut value_iter = values.iter();
         if let Some((temp, ty)) = value_iter.next() {
-            write!(self.output, "{} {}", TyName(ty), temp)?;
+            write!(self.output, "{} {}", TyName::new(ty, self.symbols), temp)?;
             for (temp, ty) in value_iter {
-                write!(self.output, ", {} {}", TyName(ty), temp)?;
+                write!(self.output, ", {} {}", TyName::new(ty, self.symbols), temp)?;
             }
         }
         writeln!(self.output, ")")?;

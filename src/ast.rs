@@ -1,63 +1,65 @@
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct If<'a> {
-    pub cond: Box<Expr<'a>>,
-    pub if_block: Block<'a>,
-    pub else_block: Else<'a>,
+use crate::symbols::Symbol;
+
+#[derive(Debug, Clone)]
+pub struct If {
+    pub cond: Box<Expr>,
+    pub if_block: Block,
+    pub else_block: Else,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Else<'a> {
-    Block(Block<'a>),
-    If(Box<If<'a>>),
+#[derive(Debug, Clone)]
+pub enum Else {
+    Block(Block),
+    If(Box<If>),
     None,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Expr<'a> {
-    Integer(&'a str),
+#[derive(Debug, Clone)]
+pub enum Expr {
+    Integer(i64),
     Bool(bool),
-    Ident(&'a str),
+    Ident(Symbol),
     Field {
-        expr: Box<Expr<'a>>,
-        name: &'a str,
+        expr: Box<Expr>,
+        name: Symbol,
     },
     Infix {
-        left: Box<Expr<'a>>,
-        right: Box<Expr<'a>>,
+        left: Box<Expr>,
+        right: Box<Expr>,
         op: InfixOp,
     },
     Prefix {
         op: PrefixOp,
-        expr: Box<Expr<'a>>,
+        expr: Box<Expr>,
     },
-    FnCall(FnCall<'a>),
+    FnCall(FnCall),
     InitStruct {
-        name: &'a str,
-        values: Vec<StructValue<'a>>
+        name: Symbol,
+        values: Vec<StructValue>
     },
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct StructValue<'a> {
-    pub name: &'a str,
-    pub expr: Expr<'a>,
+#[derive(Debug, Clone)]
+pub struct StructValue {
+    pub name: Symbol,
+    pub expr: Expr,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Assign<'a> {
-    Deref(Box<Assign<'a>>),
-    Name(&'a str),
+#[derive(Debug, Clone)]
+pub enum Assign {
+    Deref(Box<Assign>),
+    Name(Symbol),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub enum PrefixOp {
     Deref,
     Ref,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub enum InfixOp {
     Add,
     Subtract,
@@ -67,66 +69,66 @@ pub enum InfixOp {
     GreaterThan,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Stmt<'a> {
+#[derive(Debug, Clone)]
+pub enum Stmt {
     Let {
-        ident: &'a str,
-        expr: Option<Expr<'a>>,
-        ty: Option<Ty<'a>>
+        ident: Symbol,
+        expr: Option<Expr>,
+        ty: Option<Ty>
     },
     Assign {
-        assign: Assign<'a>,
-        expr: Expr<'a>
+        assign: Assign,
+        expr: Expr
     },
     While {
-        cond: Expr<'a>,
-        body: Block<'a>,
+        cond: Expr,
+        body: Block,
     },
-    Return(Option<Expr<'a>>),
-    If(If<'a>),
-    FnCall(FnCall<'a>),
+    Return(Option<Expr>),
+    If(If),
+    FnCall(FnCall),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Ty<'a> {
-    Name(&'a str),
-    Ref(Box<Ty<'a>>),
+#[derive(Debug, Clone)]
+pub enum Ty {
+    Name(Symbol),
+    Ref(Box<Ty>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Block<'a> {
-    pub stmts: Vec<Stmt<'a>>,
+#[derive(Debug, Clone)]
+pub struct Block {
+    pub stmts: Vec<Stmt>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Param<'a> {
-    pub name: &'a str,
-    pub ty: Ty<'a>,
+#[derive(Debug, Clone)]
+pub struct Param {
+    pub name: Symbol,
+    pub ty: Ty,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct FnCall<'a> {
-    pub name: &'a str,
-    pub args: Vec<Expr<'a>>,
+#[derive(Debug, Clone)]
+pub struct FnCall {
+    pub name: Symbol,
+    pub args: Vec<Expr>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Func<'a> {
-    pub params: Vec<Param<'a>>,
-    pub returns: Option<Ty<'a>>,
-    pub body: Option<Block<'a>>,
+#[derive(Debug, Clone)]
+pub struct Func {
+    pub params: Vec<Param>,
+    pub returns: Option<Ty>,
+    pub body: Option<Block>,
 }
 
-pub struct Struct<'a> {
-    pub fields: Vec<StructField<'a>>,
+pub struct Struct {
+    pub fields: Vec<StructField>,
 }
 
-pub struct StructField<'a> {
-    pub name: &'a str,
-    pub ty: Ty<'a>,
+pub struct StructField {
+    pub name: Symbol,
+    pub ty: Ty,
 }
 
-pub struct Program<'a> {
-    pub funcs: HashMap<&'a str, Func<'a>>,
-    pub structs: HashMap<&'a str, Struct<'a>>,
+pub struct Program {
+    pub funcs: HashMap<Symbol, Func>,
+    pub structs: HashMap<Symbol, Struct>,
 }
