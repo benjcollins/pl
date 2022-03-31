@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{ast, mir, ty::{TyRef, Ty, IntTyRef, IntTy, Signedness, Size}, infer::{unify, InferTy}, symbols::{Symbol, Symbols}};
+use crate::{ast, mir, ty::{TyRef, Ty, IntTyRef, IntTy, Signedness, Size, Int, StructTy, StructTyRef, KnownStruct, Field}, infer::unify, symbols::{Symbol, Symbols}};
 
 struct Compiler<'a> {
     scope: Vec<Variable>,
@@ -48,41 +48,40 @@ pub fn compile_fun(name: Symbol, func: &ast::Func, program: &ast::Program, symbo
     })
 }
 
-pub fn compile_ty(ty: &ast::Ty, program: &ast::Program, symbols: &Symbols) -> TyRef {
-    match ty {
-        ast::Ty::Name(name) => match symbols.get_str(*name) {
-            "u8" => TyRef::known(Ty::Int(IntTyRef::known(IntTy { signedness: Signedness::Unsigned, size: Size::B8 }))),
-            "u16" => TyRef::known(Ty::Int(IntTyRef::known(IntTy { signedness: Signedness::Unsigned, size: Size::B16 }))),
-            "u32" => TyRef::known(Ty::Int(IntTyRef::known(IntTy { signedness: Signedness::Unsigned, size: Size::B32 }))),
-
-            "i8" => TyRef::known(Ty::Int(IntTyRef::known(IntTy { signedness: Signedness::Signed, size: Size::B8 }))),
-            "i16" => TyRef::known(Ty::Int(IntTyRef::known(IntTy { signedness: Signedness::Signed, size: Size::B16 }))),
-            "i32" => TyRef::known(Ty::Int(IntTyRef::known(IntTy { signedness: Signedness::Signed, size: Size::B32 }))),
-
-            "bool" => TyRef::known(Ty::Bool),
-
-            _ => {
-                let structure = program.structs.get(&name).unwrap();
-                let tys = structure.fields.iter().map(|field| compile_ty(&field.ty, program, symbols)).collect();
-                TyRef::known(Ty::Struct { name: *name, tys })
-            },
-        }
-        ast::Ty::Ref(ty) => TyRef::known(Ty::Ref(compile_ty(ty, program, symbols))),
+fn compile_struct(name: Symbol, program: &ast::Program, symbols: &Symbols) -> Ty {
+    let structure = program.structs.get(&name).unwrap();
+    let mut fields = vec![];
+    for field in &structure.fields {
+        let ty = compile_ty(&field.ty, program, symbols);
+        fields.push(Field { name: field.name, ty });
     }
+    Ty::Struct(StructTyRef::new(StructTy::Known(KnownStruct { name, fields })))
+}
+
+pub fn compile_ty(ty: &ast::Ty, program: &ast::Program, symbols: &Symbols) -> TyRef {
+    TyRef::new(match ty {
+        ast::Ty::Name(name) => match symbols.get_str(*name) {
+            "u8" => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B8 }))),
+            "u16" => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B16 }))),
+            "u32" => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B32 }))),
+
+            "i8" => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B8 }))),
+            "i16" => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B16 }))),
+            "i32" => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B32 }))),
+
+            "bool" => Ty::Bool,
+
+            _ => compile_struct(*name, program, symbols),
+        }
+        ast::Ty::Ref(ty) => Ty::Ref(compile_ty(ty, program, symbols)),
+    })
 }
 
 fn deref_ty<'a>(ty: &TyRef) -> TyRef {
-    match &*ty.infer_ty() {
-        InferTy::Any => {
-            let any_ty = TyRef::any();
-            let ref_ty = TyRef::known(Ty::Ref(any_ty.clone()));
-            unify(&ty, &ref_ty).unwrap();
-            any_ty
-        }
-        InferTy::Equal(ty) => deref_ty(ty),
-        InferTy::Known(Ty::Ref(ty)) => ty.clone(),
-        _ => panic!(),
-    }
+    let any_ty = TyRef::new(Ty::Any);
+    let ref_ty = TyRef::new(Ty::Ref(any_ty.clone()));
+    unify(&ref_ty, ty).unwrap();
+    any_ty
 }
 
 impl<'a> Compiler<'a> {
@@ -109,7 +108,7 @@ impl<'a> Compiler<'a> {
                     let exit_block = self.new_block();
                     self.set_branch(*block_id, mir::Branch::Static(cond_block));
                     let (cond_expr, cond_ty) = self.compile_expr(cond);
-                    unify(&cond_ty, &TyRef::known(Ty::Bool)).unwrap();
+                    unify(&cond_ty, &TyRef::new(Ty::Bool)).unwrap();
                     self.set_branch(cond_block, mir::Branch::Condition {
                         expr: cond_expr,
                         if_true: loop_block,
@@ -121,7 +120,7 @@ impl<'a> Compiler<'a> {
                 }
                 ast::Stmt::Let { ident, expr, ty: ast_ty } => {
                     let stack_slot = self.scope.len() as u32;
-                    let ty = TyRef::any();
+                    let ty = TyRef::new(Ty::Any);
                     self.scope.push(Variable { name: *ident, stack_slot, ty: ty.clone() });
                     self.push_stmt(*block_id, mir::Stmt::Alloc(ty.clone()));
 
@@ -194,7 +193,7 @@ impl<'a> Compiler<'a> {
         let mut else_block = self.new_block();
         self.compile_block(&if_stmt.if_block, &mut if_block);
         let (cond_expr, cond_ty) = self.compile_expr(&if_stmt.cond);
-        unify(&cond_ty, &TyRef::known(Ty::Bool)).unwrap();
+        unify(&cond_ty, &TyRef::new(Ty::Bool)).unwrap();
         self.set_branch(*block_id, mir::Branch::Condition {
             expr: cond_expr,
             if_true: if_block,
@@ -226,11 +225,11 @@ impl<'a> Compiler<'a> {
     fn compile_expr(&mut self, expr: &ast::Expr) -> (mir::Expr, TyRef) {
         match expr {
             ast::Expr::Integer(value) => {
-                let int_ty = IntTyRef::any();
-                (mir::Expr::Int(*value), TyRef::known(Ty::Int(int_ty)))
+                let int_ty = IntTyRef::new(IntTy::Any);
+                (mir::Expr::Int(*value), TyRef::new(Ty::Int(int_ty)))
             }
             ast::Expr::Bool(value) =>  {
-                (mir::Expr::Bool(*value), TyRef::known(Ty::Bool))
+                (mir::Expr::Bool(*value), TyRef::new(Ty::Bool))
             }
             ast::Expr::Infix { left, right, op } => {
                 match op {
@@ -259,7 +258,7 @@ impl<'a> Compiler<'a> {
                 ast::PrefixOp::Ref => match &**expr {
                     ast::Expr::Ident(name) => {
                         let var = self.lookup_var(*name);
-                        (mir::Expr::Ref(var.stack_slot), TyRef::known(Ty::Ref(var.ty.clone())))
+                        (mir::Expr::Ref(var.stack_slot), TyRef::new(Ty::Ref(var.ty.clone())))
                     }
                     _ => panic!(),
                 }
@@ -289,7 +288,8 @@ impl<'a> Compiler<'a> {
                     tys.push(field_ty);
                     mir_values.push(mir::StructValue { ty, expr });
                 }
-                (mir::Expr::InitStruct(mir_values), TyRef::known(Ty::Struct { name: *name, tys }))
+                let ty = TyRef::new(compile_struct(*name, self.program, self.symbols));
+                (mir::Expr::InitStruct(mir_values), ty)
             }
             ast::Expr::Field { .. } => todo!(),
         }
@@ -310,8 +310,8 @@ impl<'a> Compiler<'a> {
     fn compile_arth_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::BinaryOp) -> (mir::Expr, TyRef) {
         let (left_expr, left_ty) = self.compile_expr(left);
         let (right_expr, right_ty) = self.compile_expr(right);
-        let int_ty = IntTyRef::any();
-        let ty = TyRef::known(Ty::Int(int_ty.clone()));
+        let int_ty = IntTyRef::new(IntTy::Any);
+        let ty = TyRef::new(Ty::Int(int_ty.clone()));
         unify(&ty, &left_ty).unwrap();
         unify(&ty, &right_ty).unwrap();
         (mir::Expr::Binary {
@@ -324,9 +324,9 @@ impl<'a> Compiler<'a> {
     fn compile_cmp_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::BinaryOp) -> (mir::Expr, TyRef) {
         let (left_expr, left_ty) = self.compile_expr(left);
         let (right_expr, right_ty) = self.compile_expr(right);
-        let int_ty = IntTyRef::any();
-        let ty = TyRef::known(Ty::Int(int_ty.clone()));
-        let bool_ty = TyRef::known(Ty::Bool);
+        let int_ty = IntTyRef::new(IntTy::Any);
+        let ty = TyRef::new(Ty::Int(int_ty.clone()));
+        let bool_ty = TyRef::new(Ty::Bool);
         unify(&ty, &left_ty).unwrap();
         unify(&ty, &right_ty).unwrap();
         (mir::Expr::Binary {

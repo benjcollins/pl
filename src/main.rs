@@ -4,12 +4,12 @@ mod token;
 mod lexer;
 mod ast;
 mod parser;
-mod ty;
-mod infer;
 mod compiler;
 mod mir;
 mod qbe;
 mod symbols;
+mod infer;
+mod ty;
 
 fn main() {
     let src = include_str!("../example.txt");
