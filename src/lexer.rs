@@ -32,6 +32,13 @@ pub fn lex<'a>(src: &'a str) -> Vec<Token> {
                     "else" => TokenKind::Else,
                     "while" => TokenKind::While,
                     "struct" => TokenKind::Struct,
+                    "i8" => TokenKind::I8,
+                    "i16" => TokenKind::I16,
+                    "i32" => TokenKind::I32,
+                    "u8" => TokenKind::U8,
+                    "u16" => TokenKind::U16,
+                    "u32" => TokenKind::U32,
+                    "bool" => TokenKind::Bool,
                     _ => TokenKind::Ident,
                 };
                 lexer.push_token(offset, kind);

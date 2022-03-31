@@ -93,6 +93,18 @@ pub enum Stmt {
 pub enum Ty {
     Name(Symbol),
     Ref(Box<Ty>),
+    Int(Int),
+    Bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum Int {
+    I8,
+    I16,
+    I32,
+    U8,
+    U16,
+    U32,
 }
 
 #[derive(Debug, Clone)]

@@ -1,4 +1,4 @@
-use std::{rc::Rc, cell::RefCell, fmt};
+use std::{rc::Rc, cell::RefCell};
 
 #[derive(Debug, Clone)]
 pub struct InferTyRef<T: Unify + Clone>(Rc<RefCell<InferTy<T>>>);

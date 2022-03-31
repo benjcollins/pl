@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Assign, Param, FnCall, Struct, StructField, Program, StructValue}, symbols::Symbols};
+use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Assign, Param, FnCall, Struct, StructField, Program, StructValue, Int}, symbols::Symbols};
 
 pub fn parse<'a>(tokens: &'a [Token], src: &'a str) -> ParseResult<(Program, Symbols<'a>)> {
     let mut parser = Parser {
@@ -246,8 +246,22 @@ impl<'a, 'b> Parser<'a, 'b> {
             _ => Err(self.unexpected_token())?,
         })
     }
+    fn parse_basic_ty(&mut self, ty: Ty) -> Ty {
+        self.next();
+        ty
+    }
     fn parse_ty(&mut self) -> ParseResult<Ty> {
         Ok(match self.peek() {
+            TokenKind::I8 => self.parse_basic_ty(Ty::Int(Int::I8)),
+            TokenKind::I16 => self.parse_basic_ty(Ty::Int(Int::I16)),
+            TokenKind::I32 => self.parse_basic_ty(Ty::Int(Int::I32)),
+
+            TokenKind::U8 => self.parse_basic_ty(Ty::Int(Int::U8)),
+            TokenKind::U16 => self.parse_basic_ty(Ty::Int(Int::U16)),
+            TokenKind::U32 => self.parse_basic_ty(Ty::Int(Int::U32)),
+
+            TokenKind::Bool => self.parse_basic_ty(Ty::Bool),
+
             TokenKind::Ampersand => {
                 self.next();
                 Ty::Ref(Box::new(self.parse_ty()?))

@@ -1,13 +1,12 @@
 use std::collections::HashSet;
 
-use crate::{ast, mir, ty::{TyRef, Ty, IntTyRef, IntTy, Signedness, Size, Int, StructTy, StructTyRef, KnownStruct, Field}, infer::unify, symbols::{Symbol, Symbols}};
+use crate::{ast, mir, ty::{TyRef, Ty, IntTyRef, IntTy, Signedness, Size, Int, StructTy, StructTyRef, KnownStruct, Field}, infer::unify, symbols::Symbol};
 
 struct Compiler<'a> {
     scope: Vec<Variable>,
     program: &'a ast::Program,
     returns: Option<TyRef>,
     blocks: Vec<mir::Block>,
-    symbols: &'a Symbols<'a>,
 }
 
 #[derive(Debug, Clone)]
@@ -17,16 +16,16 @@ struct Variable {
     ty: TyRef,
 }
 
-pub fn compile_fun(name: Symbol, func: &ast::Func, program: &ast::Program, symbols: &Symbols) -> Option<mir::Func> {
+pub fn compile_fun(name: Symbol, func: &ast::Func, program: &ast::Program) -> Option<mir::Func> {
     let body = match &func.body {
         Some(body) => body,
         None => return None,
     };
-    let returns = func.returns.as_ref().map(|ty| compile_ty(&ty, program, symbols));
+    let returns = func.returns.as_ref().map(|ty| compile_ty(&ty, program));
     let mut scope = vec![];
     let mut params = vec![];
     for param in &func.params {
-        let ty = compile_ty(&param.ty, program, symbols);
+        let ty = compile_ty(&param.ty, program);
         let stack_slot = scope.len() as u32;
         params.push(ty.clone());
         scope.push(Variable { name: param.name, ty, stack_slot });
@@ -36,7 +35,6 @@ pub fn compile_fun(name: Symbol, func: &ast::Func, program: &ast::Program, symbo
         program,
         blocks: vec![],
         returns,
-        symbols,
     };
     let mut block_id = compiler.new_block();
     compiler.compile_block(&body, &mut block_id);
@@ -48,32 +46,30 @@ pub fn compile_fun(name: Symbol, func: &ast::Func, program: &ast::Program, symbo
     })
 }
 
-fn compile_struct(name: Symbol, program: &ast::Program, symbols: &Symbols) -> Ty {
+fn compile_struct(name: Symbol, program: &ast::Program) -> Ty {
     let structure = program.structs.get(&name).unwrap();
     let mut fields = vec![];
     for field in &structure.fields {
-        let ty = compile_ty(&field.ty, program, symbols);
+        let ty = compile_ty(&field.ty, program);
         fields.push(Field { name: field.name, ty });
     }
     Ty::Struct(StructTyRef::new(StructTy::Known(KnownStruct { name, fields })))
 }
 
-pub fn compile_ty(ty: &ast::Ty, program: &ast::Program, symbols: &Symbols) -> TyRef {
+pub fn compile_ty(ty: &ast::Ty, program: &ast::Program) -> TyRef {
     TyRef::new(match ty {
-        ast::Ty::Name(name) => match symbols.get_str(*name) {
-            "u8" => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B8 }))),
-            "u16" => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B16 }))),
-            "u32" => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B32 }))),
+        ast::Ty::Int(int) => match int {
+            ast::Int::I8 => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B8 }))),
+            ast::Int::I16 => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B16 }))),
+            ast::Int::I32 => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Unsigned, size: Size::B32 }))),
 
-            "i8" => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B8 }))),
-            "i16" => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B16 }))),
-            "i32" => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B32 }))),
-
-            "bool" => Ty::Bool,
-
-            _ => compile_struct(*name, program, symbols),
+            ast::Int::U8 => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B8 }))),
+            ast::Int::U16 => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B16 }))),
+            ast::Int::U32 => Ty::Int(IntTyRef::new(IntTy::Int(Int { signedness: Signedness::Signed, size: Size::B32 }))),
         }
-        ast::Ty::Ref(ty) => Ty::Ref(compile_ty(ty, program, symbols)),
+        ast::Ty::Bool => Ty::Bool,
+        ast::Ty::Name(name) => compile_struct(*name, program),
+        ast::Ty::Ref(ty) => Ty::Ref(compile_ty(ty, program)),
     })
 }
 
@@ -125,7 +121,7 @@ impl<'a> Compiler<'a> {
                     self.push_stmt(*block_id, mir::Stmt::Alloc(ty.clone()));
 
                     if let Some(ast_ty) = ast_ty {
-                        let ast_ty = compile_ty(ast_ty, self.program, self.symbols);
+                        let ast_ty = compile_ty(ast_ty, self.program);
                         unify(&ty, &ast_ty).unwrap();
                     }
                     
@@ -283,12 +279,12 @@ impl<'a> Compiler<'a> {
                     done.insert(field.name);
                     let value = values.iter().find(|value| value.name == field.name).unwrap();
                     let (expr, ty) = self.compile_expr(&value.expr);
-                    let field_ty = compile_ty(&field.ty, self.program, self.symbols);
+                    let field_ty = compile_ty(&field.ty, self.program);
                     unify(&ty, &field_ty).unwrap();
                     tys.push(field_ty);
                     mir_values.push(mir::StructValue { ty, expr });
                 }
-                let ty = TyRef::new(compile_struct(*name, self.program, self.symbols));
+                let ty = TyRef::new(compile_struct(*name, self.program));
                 (mir::Expr::InitStruct(mir_values), ty)
             }
             ast::Expr::Field { .. } => todo!(),
@@ -301,11 +297,11 @@ impl<'a> Compiler<'a> {
         }
         let args = fn_call.args.iter().zip(&func.params).map(|(arg, param)| {
             let (expr, ty) = self.compile_expr(arg);
-            let param_ty = compile_ty(&param.ty, self.program, self.symbols);
+            let param_ty = compile_ty(&param.ty, self.program);
             unify(&ty, &param_ty).unwrap();
             mir::Arg { expr, ty }
         }).collect();
-        (args, func.returns.as_ref().map(|ty| compile_ty(ty, self.program, self.symbols)))
+        (args, func.returns.as_ref().map(|ty| compile_ty(ty, self.program)))
     }
     fn compile_arth_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::BinaryOp) -> (mir::Expr, TyRef) {
         let (left_expr, left_ty) = self.compile_expr(left);

@@ -23,6 +23,14 @@ pub enum TokenKind {
     Ampersand,
     Dot,
 
+    I8,
+    I16,
+    I32,
+    U8,
+    U16,
+    U32,
+    Bool,
+
     Var,
     Func,
     Return,

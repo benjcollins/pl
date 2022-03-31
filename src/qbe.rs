@@ -153,7 +153,7 @@ pub fn compile_fun<'a, W: Write>(func: &Func, output: W, symbols: &'a Symbols<'a
 pub fn compile_struct<W: Write>(name: Symbol, structure: &ast::Struct, program: &ast::Program, mut output: W, symbols: &Symbols) -> io::Result<()> {
     write!(output, "type :{} = {{ ", symbols.get_str(name))?;
     for field in &structure.fields {
-        write!(output, "{}, ", TyName::new(&compiler::compile_ty(&field.ty, program, symbols).concrete(), symbols))?;
+        write!(output, "{}, ", TyName::new(&compiler::compile_ty(&field.ty, program).concrete(), symbols))?;
     }
     writeln!(output, "}}\n")
 }
