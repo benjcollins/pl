@@ -34,7 +34,7 @@ pub enum Expr {
         op: PrefixOp,
         expr: Box<Expr>,
     },
-    FnCall(FnCall),
+    FnCall(FuncCall),
     InitStruct {
         name: Symbol,
         values: Vec<StructValue>
@@ -86,7 +86,7 @@ pub enum Stmt {
     },
     Return(Option<Expr>),
     If(If),
-    FnCall(FnCall),
+    FnCall(FuncCall),
 }
 
 #[derive(Debug, Clone)]
@@ -119,7 +119,7 @@ pub struct Param {
 }
 
 #[derive(Debug, Clone)]
-pub struct FnCall {
+pub struct FuncCall {
     pub name: Symbol,
     pub args: Vec<Expr>,
 }

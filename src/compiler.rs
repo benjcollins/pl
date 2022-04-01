@@ -290,7 +290,7 @@ impl<'a> Compiler<'a> {
             ast::Expr::Field { .. } => todo!(),
         }
     }
-    fn compile_fn_call(&mut self, fn_call: &ast::FnCall) -> (Vec<mir::Arg>, Option<TyRef>) {
+    fn compile_fn_call(&mut self, fn_call: &ast::FuncCall) -> (Vec<mir::Arg>, Option<TyRef>) {
         let func = self.program.funcs.get(&fn_call.name).unwrap();
         if fn_call.args.len() != func.params.len() {
             panic!()

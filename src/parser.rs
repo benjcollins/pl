@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Assign, Param, FnCall, Struct, StructField, Program, StructValue, Int}, symbols::Symbols};
+use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Assign, Param, FuncCall, Struct, StructField, Program, StructValue, Int}, symbols::Symbols};
 
 pub fn parse<'a>(tokens: &'a [Token], src: &'a str) -> ParseResult<(Program, Symbols<'a>)> {
     let mut parser = Parser {
@@ -82,7 +82,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     TokenKind::OpenBrace => {
                         self.next();
                         let args = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| parser.parse_expr(Prec::Bracket))?;
-                        Expr::FnCall(FnCall { name: symbol, args })
+                        Expr::FnCall(FuncCall { name: symbol, args })
                     }
                     TokenKind::OpenCurlyBrace => {
                         self.next();
@@ -227,7 +227,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let stmt = if self.peek() == TokenKind::OpenBrace {
                     self.next();
                     let args = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| parser.parse_expr(Prec::Bracket))?;
-                    Stmt::FnCall(FnCall { name: symbol, args })
+                    Stmt::FnCall(FuncCall { name: symbol, args })
                 } else {
                     self.eat_or_err(TokenKind::Equals)?;
                     let expr = self.parse_expr(Prec::Bracket)?;
