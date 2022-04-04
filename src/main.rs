@@ -10,6 +10,7 @@ mod qbe;
 mod symbols;
 mod infer;
 mod ty;
+mod lir;
 
 fn main() {
     let src = include_str!("../example.txt");
@@ -25,10 +26,10 @@ fn main() {
 
     let file = File::create("output.ssa").unwrap();
     for (name, structure) in &program.structs {
-        qbe::compile_struct(*name, structure, &program, &file, &symbols).unwrap();
+        qbe::compile_struct(*name, structure, &file, &symbols).unwrap();
     }
     for func_mir in &func_mirs {
-        qbe::compile_fun(func_mir, &file, &symbols).unwrap();
+        qbe::compile_fun(func_mir, &file, &symbols, &program).unwrap();
     }
     Command::new("qbe/obj/qbe").args(["output.ssa", "-o", "output.S"]).status().unwrap();
     Command::new("gcc").args(["-o", "output", "main.c", "output.S"]).status().unwrap();

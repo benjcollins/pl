@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap};
 
 use crate::{infer::{InferTyRef, Unify, unify}, symbols::Symbol};
 
@@ -39,27 +39,24 @@ pub enum Size {
 
 #[derive(Debug, Clone)]
 pub enum StructTy {
-    Known(KnownStruct<TyRef>),
+    Known {
+        name: Symbol,
+        fields: Vec<Field>,
+    },
     WithFields(HashMap<Symbol, TyRef>),
 }
 
 #[derive(Debug, Clone)]
-pub struct Field<T> {
+pub struct Field {
     pub name: Symbol,
-    pub ty: T,
-}
-
-#[derive(Debug, Clone)]
-pub struct KnownStruct<T> {
-    pub name: Symbol,
-    pub fields: Vec<Field<T>>,
+    pub ty: TyRef,
 }
 
 pub enum ConcreteTy {
     Bool,
     Ref(Box<ConcreteTy>),
     Int(Int),
-    Struct(KnownStruct<ConcreteTy>),
+    Struct(Vec<ConcreteTy>),
 }
 
 impl Unify for Ty {
@@ -110,22 +107,22 @@ impl Unify for IntTy {
 }
 
 impl Unify for StructTy {
-    type Concrete = KnownStruct<ConcreteTy>;
+    type Concrete = Vec<ConcreteTy>;
     
     fn unify(a: Self, b: Self) -> Result<Self, ()> {
         Ok(match (a, b) {
-            (StructTy::Known(a), StructTy::Known(b)) => if a.name == b.name {
-                StructTy::Known(a)
+            (StructTy::Known { name: a, fields }, StructTy::Known { name: b, .. }) => if a == b {
+                StructTy::Known { name: a, fields }
             } else {
                 Err(())?
             }
-            (StructTy::Known(s), StructTy::WithFields(required_fields)) |
-            (StructTy::WithFields(required_fields), StructTy::Known(s)) => {
+            (StructTy::Known { name, fields }, StructTy::WithFields(required_fields)) |
+            (StructTy::WithFields(required_fields), StructTy::Known { name, fields }) => {
                 for (name, ty) in required_fields {
-                    let field = s.fields.iter().find(|field| field.name == name).unwrap();
+                    let field = fields.iter().find(|field| field.name == name).unwrap();
                     unify(&field.ty, &ty)?;
                 }
-                StructTy::Known(s)
+                StructTy::Known { name, fields }
             }
             (StructTy::WithFields(mut a), StructTy::WithFields(b)) => {
                 for (name, b_ty) in b {
@@ -140,10 +137,9 @@ impl Unify for StructTy {
     }
     fn concrete(&self) -> Self::Concrete {
         match self {
-            StructTy::Known(s) => KnownStruct {
-                name: s.name,
-                fields: s.fields.iter().map(|field| Field { name: field.name, ty: field.ty.concrete() }).collect(),
-            },
+            StructTy::Known { fields, .. } => {
+                fields.iter().map(|field| field.ty.concrete()).collect()
+            }
             StructTy::WithFields(_) => panic!(),
         }
     }
@@ -151,16 +147,21 @@ impl Unify for StructTy {
 
 // impl fmt::Display for IntTy {
 //     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         let signedness = match self.signedness {
-//             Signedness::Signed => "i",
-//             Signedness::Unsigned => "u",
-//         };
-//         let size = match self.size {
-//             Size::B8 => "8",
-//             Size::B16 => "16",
-//             Size::B32 => "32",
-//         };
-//         write!(f, "{}{}", signedness, size)
+//         match self {
+//             IntTy::Int(int) => {
+//                 let signedness = match int.signedness {
+//                     Signedness::Signed => "i",
+//                     Signedness::Unsigned => "u",
+//                 };
+//                 let size = match int.size {
+//                     Size::B8 => "8",
+//                     Size::B16 => "16",
+//                     Size::B32 => "32",
+//                 };
+//                 write!(f, "{}{}", signedness, size)
+//             }
+//             IntTy::Any => write!(f, "int?"),
+//         }
 //     }
 // }
 
@@ -168,9 +169,19 @@ impl Unify for StructTy {
 //     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 //         match self {
 //             Ty::Bool => write!(f, "bool"),
-//             Ty::Ref(ty) => write!(f, "&{}", ty.ty())),
-//             Ty::Int(int_ty) => write!(f, "{}", int_ty.concrete())),
-//             Ty::Struct { .. } => todo!(),
+//             Ty::Ref(ty) => write!(f, "&{}", ty),
+//             Ty::Int(int_ty) => write!(f, "{}", int_ty),
+//             Ty::Struct(s) => write!(f, "{}", s),
+//             Ty::Any => write!(f, "any?"),
+//         }
+//     }
+// }
+
+// impl fmt::Display for StructTy {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         match self {
+//             StructTy::Known { name, .. } => write!(f, "{}", name),
+//             StructTy::WithFields(_) => write!(f, "struct?"),
 //         }
 //     }
 // }

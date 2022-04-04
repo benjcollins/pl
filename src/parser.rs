@@ -227,7 +227,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let stmt = if self.peek() == TokenKind::OpenBrace {
                     self.next();
                     let args = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| parser.parse_expr(Prec::Bracket))?;
-                    Stmt::FnCall(FuncCall { name: symbol, args })
+                    Stmt::FuncCall(FuncCall { name: symbol, args })
                 } else {
                     self.eat_or_err(TokenKind::Equals)?;
                     let expr = self.parse_expr(Prec::Bracket)?;

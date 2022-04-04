@@ -1,12 +1,13 @@
 use std::{io::{Write, self}, fmt};
 
-use crate::{mir::{Func, BlockId, Branch, Stmt, Expr, Assign, BinaryOp, FuncCall, Block}, ty::{TyRef, Size, Signedness, ConcreteTy, KnownStruct}, ast, compiler, symbols::{Symbols, Symbol}};
+use crate::{mir::{Func, BlockId, Branch, Stmt, Expr, Assign, BinaryOp, FuncCall, Block}, ty::{Size, Signedness, ConcreteTy}, ast, symbols::{Symbols, Symbol}};
 
 struct Compiler<'a, W: Write> {
     stack_slots: Vec<Temp>,
     temp_count: u32,
     output: W,
     symbols: &'a Symbols<'a>,
+    program: &'a ast::Program,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -29,10 +30,10 @@ fn size_bytes(ty: &ConcreteTy) -> u32 {
             Size::B32 => 4,
         }
         ConcreteTy::Ref(_) => 8,
-        ConcreteTy::Struct(KnownStruct { fields, .. }) => {
+        ConcreteTy::Struct(fields) => {
             let mut size = 0;
-            for field in fields {
-                size = align_to(size, align_bytes(&field.ty)) + size_bytes(&field.ty);
+            for ty in fields {
+                size = align_to(size, align_bytes(ty)) + size_bytes(ty);
             }
             size
         }
@@ -52,10 +53,10 @@ fn align_bytes(ty: &ConcreteTy) -> u32 {
             Size::B32 => 4,
         }
         ConcreteTy::Ref(_) => 8,
-        ConcreteTy::Struct(KnownStruct { fields, .. }) => {
+        ConcreteTy::Struct(fields) => {
             let mut max = 0;
-            for field in fields {
-                let align =  align_bytes(&field.ty);
+            for ty in fields {
+                let align =  align_bytes(ty);
                 if align > max {
                     max = align
                 }
@@ -66,12 +67,12 @@ fn align_bytes(ty: &ConcreteTy) -> u32 {
 }
 
 struct TyName<'a> {
-    ty: &'a ConcreteTy,
+    ty: &'a ast::Ty,
     symbols: &'a Symbols<'a>,
 }
 
 impl<'a> TyName<'a> {
-    fn new(ty: &'a ConcreteTy, symbols: &'a Symbols<'a>) -> TyName<'a> {
+    fn new(ty: &'a ast::Ty, symbols: &'a Symbols<'a>) -> TyName<'a> {
         TyName { ty, symbols }
     }
 }
@@ -79,10 +80,10 @@ impl<'a> TyName<'a> {
 impl<'a> fmt::Display for TyName<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.ty {
-            ConcreteTy::Bool => write!(f, "w"),
-            ConcreteTy::Ref(_) => write!(f, "l"),
-            ConcreteTy::Int(_) => write!(f, "w"),
-            ConcreteTy::Struct(KnownStruct { name, .. }) => write!(f, ":{}", self.symbols.get_str(*name)),
+            ast::Ty::Bool => write!(f, "w"),
+            ast::Ty::Ref(_) => write!(f, "l"),
+            ast::Ty::Int(_) => write!(f, "w"),
+            ast::Ty::Name(name) => write!(f, ":{}", self.symbols.get_str(*name)),
         }
     }
 }
@@ -104,7 +105,7 @@ impl fmt::Display for Value {
 
 impl Label {
     fn from_block(block: BlockId) -> Label {
-        Label(block.id())
+        Label(block.0)
     }
 }
 
@@ -114,33 +115,34 @@ impl fmt::Display for Label {
     }
 }
 
-pub fn compile_fun<'a, W: Write>(func: &Func, output: W, symbols: &'a Symbols<'a>) -> io::Result<()> {
+pub fn compile_fun<'a, W: Write>(func: &Func, output: W, symbols: &'a Symbols<'a>, program: &ast::Program) -> io::Result<()> {
     let mut compiler = Compiler {
         stack_slots: vec![],
         temp_count: 0,
         output,
         symbols,
+        program,
     };
-    let params: Vec<_> = func.params.iter().map(|param| (compiler.new_temp(), param)).collect();
+    let func_ast = program.funcs.get(&func.name).unwrap();
     write!(compiler.output, "export function ")?;
-    if let Some(ty) = &func.returns {
-        write!(compiler.output, "{} ", TyName::new(&ty.concrete(), symbols))?;
+    if let Some(ty) = &func_ast.returns {
+        write!(compiler.output, "{} ", TyName::new(ty, symbols))?;
     }
     write!(compiler.output, "${}(", symbols.get_str(func.name))?;
-    let mut param_iter = params.iter();
-    if let Some((temp, ty)) = param_iter.next() {
-        write!(compiler.output, "{} {}", TyName::new(&ty.concrete(), symbols), temp)?;
-        for (temp, ty) in param_iter {
-            write!(compiler.output, ", {} {}", TyName::new(&ty.concrete(), symbols), temp)?;
+    let param_temps: Vec<_> = (0..func_ast.params.len()).map(|_| compiler.new_temp()).collect();
+    let mut param_iter = param_temps.iter().zip(&func_ast.params);
+    if let Some((temp, param)) = param_iter.next() {
+        write!(compiler.output, "{} {}", TyName::new(&param.ty, symbols), temp)?;
+        for (temp, param) in param_iter {
+            write!(compiler.output, ", {} {}", TyName::new(&param.ty, symbols), temp)?;
         }
     }
     writeln!(compiler.output, ") {{")?;
     writeln!(compiler.output, "@start")?;
-    for (temp, ty) in &params {
-        let ty = ty.concrete();
-        let addr = compiler.alloc_ty(&ty)?;
+    for (temp, ty) in param_temps.iter().zip(&func.params) {
+        let addr = compiler.alloc_ty(&ty.concrete())?;
         compiler.stack_slots.push(addr);
-        compiler.store(Value::Temp(*temp), &ty, addr)?;
+        compiler.store(Value::Temp(*temp), &ty.concrete(), addr)?;
     }
     for (id, block) in func.blocks.iter().enumerate() {
         writeln!(compiler.output, "{}", Label::from_block(BlockId(id as u32)))?;
@@ -150,10 +152,10 @@ pub fn compile_fun<'a, W: Write>(func: &Func, output: W, symbols: &'a Symbols<'a
     Ok(())
 }
 
-pub fn compile_struct<W: Write>(name: Symbol, structure: &ast::Struct, program: &ast::Program, mut output: W, symbols: &Symbols) -> io::Result<()> {
+pub fn compile_struct<W: Write>(name: Symbol, structure: &ast::Struct, mut output: W, symbols: &Symbols) -> io::Result<()> {
     write!(output, "type :{} = {{ ", symbols.get_str(name))?;
     for field in &structure.fields {
-        write!(output, "{}, ", TyName::new(&compiler::compile_ty(&field.ty, program).concrete(), symbols))?;
+        write!(output, "{}, ", TyName::new(&field.ty, symbols))?;
     }
     writeln!(output, "}}\n")
 }
@@ -206,8 +208,11 @@ impl<'a, W: Write> Compiler<'a, W> {
                 let addr = self.compile_assign(assign)?;
                 self.store(temp, &ty.concrete(), addr)?;
             }
-            Stmt::FuncCall(fn_call) => {
-                self.compile_fn_call(fn_call, None)?;
+            Stmt::FuncCall(func_call) => {
+                let returns = self.compile_fn_call(func_call)?;
+                if returns.is_some() {
+                    panic!()
+                }
             }
         };
         Ok(())
@@ -266,9 +271,8 @@ impl<'a, W: Write> Compiler<'a, W> {
                 let temp = self.compile_expr(expr)?;
                 Value::Temp(self.load(&ty.concrete(), temp)?)
             }
-            Expr::FnCall { fn_call, result } => {
-                let temp = self.new_temp();
-                self.compile_fn_call(fn_call, Some((temp, result)))?;
+            Expr::FuncCall(func_call) => {
+                let temp = self.compile_fn_call(func_call)?.unwrap();
                 Value::Temp(temp)
             }
             Expr::InitStruct(values) => {
@@ -289,37 +293,44 @@ impl<'a, W: Write> Compiler<'a, W> {
             }
         })
     }
-    fn compile_fn_call(&mut self, fn_call: &FuncCall, returns: Option<(Temp, &TyRef)>) -> io::Result<()> {
-        let values: Vec<_> = fn_call.args.iter().map(|arg| (self.compile_expr(&arg.expr).unwrap(), &arg.ty)).collect();
+    fn compile_fn_call(&mut self, func_call: &FuncCall) -> io::Result<Option<Temp>> {
+        let func = self.program.funcs.get(&func_call.name).unwrap();
+
+        let values: Vec<_> = func_call.args.iter().map(|expr| self.compile_expr(&expr).unwrap()).collect();
         write!(self.output, "  ")?;
-        if let Some((temp, ty)) = returns {
-            write!(self.output, "  {} ={} ", temp, TyName::new(&ty.concrete(), self.symbols))?;
-        }
-        write!(self.output, "call ${}(", self.symbols.get_str(fn_call.name))?;
-        let mut value_iter = values.iter();
-        if let Some((temp, ty)) = value_iter.next() {
-            write!(self.output, "{} {}", TyName::new(&ty.concrete(), self.symbols), temp)?;
-            for (temp, ty) in value_iter {
-                write!(self.output, ", {} {}", TyName::new(&ty.concrete(), self.symbols), temp)?;
+        let temp = if let Some(ty) = func.returns.as_ref() {
+            let temp = self.new_temp();
+            write!(self.output, "  {} ={} ", temp, TyName::new(&ty, self.symbols))?;
+            Some(temp)
+        } else {
+            None
+        };
+
+        write!(self.output, "call ${}(", self.symbols.get_str(func_call.name))?;
+        let mut value_iter = values.iter().zip(&func.params);
+        if let Some((temp, param)) = value_iter.next() {
+            write!(self.output, "{} {}", TyName::new(&param.ty, self.symbols), temp)?;
+            for (temp, param) in value_iter {
+                write!(self.output, ", {} {}", TyName::new(&param.ty, self.symbols), temp)?;
             }
         }
         writeln!(self.output, ")")?;
-        Ok(())
+        Ok(temp)
     }
-    fn copy_struct(&mut self, src: Value, dest: Temp, s: &KnownStruct<ConcreteTy>) -> io::Result<()> {
+    fn copy_struct(&mut self, src: Value, dest: Temp, tys: &[ConcreteTy]) -> io::Result<()> {
         let mut offset = 0;
-        for field in &s.fields {
-            offset = align_to(offset, align_bytes(&field.ty));
+        for ty in tys {
+            offset = align_to(offset, align_bytes(ty));
 
             let src_off = self.new_temp();
             writeln!(self.output, "  {} =l add {}, {}", src_off, src, offset)?;
-            let value = self.load(&field.ty, Value::Temp(src_off))?;
+            let value = self.load(ty, Value::Temp(src_off))?;
             
             let dest_off = self.new_temp();
             writeln!(self.output, "  {} =l add {}, {}", dest_off, dest, offset)?;
             
-            self.store(Value::Temp(value), &field.ty, dest_off)?;
-            offset += size_bytes(&field.ty);
+            self.store(Value::Temp(value), ty, dest_off)?;
+            offset += size_bytes(ty);
         }
         Ok(())
     }
@@ -339,8 +350,8 @@ impl<'a, W: Write> Compiler<'a, W> {
             ConcreteTy::Ref(_) => {
                 writeln!(self.output, "  storel {}, {}", value, addr)?;
             }
-            ConcreteTy::Struct(s) => {
-                self.copy_struct(value, addr, s)?;
+            ConcreteTy::Struct(tys) => {
+                self.copy_struct(value, addr, tys)?;
             }
         }
         Ok(())

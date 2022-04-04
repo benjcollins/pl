@@ -86,7 +86,7 @@ pub enum Stmt {
     },
     Return(Option<Expr>),
     If(If),
-    FnCall(FuncCall),
+    FuncCall(FuncCall),
 }
 
 #[derive(Debug, Clone)]

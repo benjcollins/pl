@@ -1,6 +1,14 @@
 use crate::{ty::{TyRef, IntTyRef}, symbols::Symbol};
 
 #[derive(Debug, Clone)]
+pub struct Func {
+    pub name: Symbol,
+    pub params: Vec<TyRef>,
+    pub returns: Option<TyRef>,
+    pub blocks: Vec<Block>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
     pub branch: Branch,
@@ -18,14 +26,6 @@ pub enum Branch {
         if_true: BlockId,
         if_false: BlockId,
     },
-}
-
-#[derive(Debug, Clone)]
-pub struct Func {
-    pub name: Symbol,
-    pub params: Vec<TyRef>,
-    pub returns: Option<TyRef>,
-    pub blocks: Vec<Block>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,10 +64,7 @@ pub enum Expr {
         expr: Box<Expr>,
         ty: TyRef,
     },
-    FnCall {
-        fn_call: FuncCall,
-        result: TyRef,
-    },
+    FuncCall(FuncCall),
     InitStruct(Vec<StructValue>),
 }
 
@@ -80,13 +77,7 @@ pub struct StructValue {
 #[derive(Debug, Clone)]
 pub struct FuncCall {
     pub name: Symbol,
-    pub args: Vec<Arg>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Arg {
-    pub expr: Expr,
-    pub ty: TyRef,
+    pub args: Vec<Expr>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -99,11 +90,11 @@ pub enum BinaryOp {
     GreaterThan,
 }
 
-impl BlockId {
-    pub fn id(&self) -> u32 {
-        self.0
-    }
-}
+// impl BlockId {
+//     pub fn id(&self) -> u32 {
+//         self.0
+//     }
+// }
 
 // impl fmt::Display for Func {
 //     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

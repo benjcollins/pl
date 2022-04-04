@@ -1,4 +1,4 @@
-use std::{rc::Rc, cell::RefCell};
+use std::{rc::Rc, cell::RefCell, fmt};
 
 #[derive(Debug)]
 pub struct InferTyRef<T: Unify>(Rc<RefCell<InferTy<T>>>);
@@ -60,6 +60,15 @@ pub fn unify<T: Unify>(a: &InferTyRef<T>, b: &InferTyRef<T>) -> Result<InferTyRe
             *a_ref = InferTy::Equal(unified.clone());
             *b_ref = InferTy::Equal(unified.clone());
             Ok(unified)
+        }
+    }
+}
+
+impl<T: fmt::Display + Unify> fmt::Display for InferTyRef<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &*self.0.borrow() {
+            InferTy::Equal(ty) => write!(f, "{}", ty),
+            InferTy::Known(ty) => write!(f, "{}", ty.as_ref().unwrap()),
         }
     }
 }
