@@ -262,7 +262,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
             TokenKind::Bool => self.parse_basic_ty(Ty::Bool),
 
-            TokenKind::Ampersand => {
+            TokenKind::Asterisk => {
                 self.next();
                 Ty::Ref(Box::new(self.parse_ty()?))
             }
