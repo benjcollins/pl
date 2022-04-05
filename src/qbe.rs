@@ -1,6 +1,6 @@
 use std::{io::{Write, self}, fmt};
 
-use crate::{mir::{Func, BlockId, Branch, Stmt, Expr, Assign, BinaryOp, FuncCall, Block}, ty::{Size, Signedness, ConcreteTy}, ast, symbols::{Symbols, Symbol}};
+use crate::{ty::{Size, Signedness}, ast, symbols::{Symbols, Symbol}, lir::{self, Stmt, Assign, Branch, Expr, Ty, FuncCall}, mir::BinaryOp};
 
 struct Compiler<'a, W: Write> {
     stack_slots: Vec<Temp>,
@@ -21,16 +21,16 @@ enum Value {
 #[derive(Debug, Clone, Copy)]
 struct Label(u32);
 
-fn size_bytes(ty: &ConcreteTy) -> u32 {
+fn size_bytes(ty: &lir::Ty) -> u32 {
     match ty {
-        ConcreteTy::Bool => 1,
-        ConcreteTy::Int(int_ty) => match int_ty.size {
+        lir::Ty::Bool => 1,
+        lir::Ty::Int(int_ty) => match int_ty.size {
             Size::B8 => 1,
             Size::B16 => 2,
             Size::B32 => 4,
         }
-        ConcreteTy::Ref(_) => 8,
-        ConcreteTy::Struct(fields) => {
+        lir::Ty::Ptr => 8,
+        lir::Ty::Struct(fields) => {
             let mut size = 0;
             for ty in fields {
                 size = align_to(size, align_bytes(ty)) + size_bytes(ty);
@@ -44,16 +44,16 @@ fn align_to(offset: u32, align: u32) -> u32 {
     (offset + align - 1) & !(align-1)
 }
 
-fn align_bytes(ty: &ConcreteTy) -> u32 {
+fn align_bytes(ty: &lir::Ty) -> u32 {
     match ty {
-        ConcreteTy::Bool => 1,
-        ConcreteTy::Int(int_ty) => match int_ty.size {
+        lir::Ty::Bool => 1,
+        lir::Ty::Int(int_ty) => match int_ty.size {
             Size::B8 => 1,
             Size::B16 => 2,
             Size::B32 => 4,
         }
-        ConcreteTy::Ref(_) => 8,
-        ConcreteTy::Struct(fields) => {
+        lir::Ty::Ptr => 8,
+        lir::Ty::Struct(fields) => {
             let mut max = 0;
             for ty in fields {
                 let align =  align_bytes(ty);
@@ -83,7 +83,7 @@ impl<'a> fmt::Display for TyName<'a> {
             ast::Ty::Bool => write!(f, "w"),
             ast::Ty::Ref(_) => write!(f, "l"),
             ast::Ty::Int(_) => write!(f, "w"),
-            ast::Ty::Name(name) => write!(f, ":{}", self.symbols.get_str(*name)),
+            ast::Ty::Struct(name) => write!(f, ":{}", self.symbols.get_str(*name)),
         }
     }
 }
@@ -103,19 +103,13 @@ impl fmt::Display for Value {
     }
 }
 
-impl Label {
-    fn from_block(block: BlockId) -> Label {
-        Label(block.0)
-    }
-}
-
 impl fmt::Display for Label {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "@l{}", self.0)
     }
 }
 
-pub fn compile_fun<'a, W: Write>(func: &Func, output: W, symbols: &'a Symbols<'a>, program: &ast::Program) -> io::Result<()> {
+pub fn compile_fun<'a, W: Write>(func: &lir::Func, output: W, symbols: &'a Symbols<'a>, program: &ast::Program) -> io::Result<()> {
     let mut compiler = Compiler {
         stack_slots: vec![],
         temp_count: 0,
@@ -140,12 +134,12 @@ pub fn compile_fun<'a, W: Write>(func: &Func, output: W, symbols: &'a Symbols<'a
     writeln!(compiler.output, ") {{")?;
     writeln!(compiler.output, "@start")?;
     for (temp, ty) in param_temps.iter().zip(&func.params) {
-        let addr = compiler.alloc_ty(&ty.concrete())?;
+        let addr = compiler.alloc_ty(&ty)?;
         compiler.stack_slots.push(addr);
-        compiler.store(Value::Temp(*temp), &ty.concrete(), addr)?;
+        compiler.store(Value::Temp(*temp), &ty, addr)?;
     }
     for (id, block) in func.blocks.iter().enumerate() {
-        writeln!(compiler.output, "{}", Label::from_block(BlockId(id as u32)))?;
+        writeln!(compiler.output, "{}", Label(id as u32))?;
         compiler.compile_block(block)?;
     }
     writeln!(compiler.output, "}}\n")?;
@@ -161,7 +155,7 @@ pub fn compile_struct<W: Write>(name: Symbol, structure: &ast::Struct, mut outpu
 }
 
 impl<'a, W: Write> Compiler<'a, W> {
-    fn compile_block<'s>(&mut self, block: &Block) -> io::Result<()> {
+    fn compile_block<'s>(&mut self, block: &lir::Block) -> io::Result<()> {
         for stmt in &block.stmts {
             self.compile_stmt(stmt)?;
         }
@@ -169,16 +163,16 @@ impl<'a, W: Write> Compiler<'a, W> {
             Branch::Return(expr) => {
                 match expr {
                     Some(expr) => {
-                        let temp = self.compile_expr(&expr)?;
+                        let temp = self.compile_expr(expr)?;
                         writeln!(self.output, "  ret {}", temp)?;
                     }
                     None => writeln!(self.output, "  ret")?,
                 }
             }
-            Branch::Static(target) => writeln!(self.output, "  jmp {}", Label::from_block(*target))?,
+            Branch::Static(target) => writeln!(self.output, "  jmp {}", Label(target.0))?,
             Branch::Condition { expr, if_true, if_false } => {
                 let temp = self.compile_expr(&expr)?;
-                writeln!(self.output, "  jnz {}, {}, {}", temp, Label::from_block(*if_true), Label::from_block(*if_false))?;
+                writeln!(self.output, "  jnz {}, {}, {}", temp, Label(if_true.0), Label(if_false.0))?;
             }
         };
         Ok(())
@@ -194,19 +188,19 @@ impl<'a, W: Write> Compiler<'a, W> {
         writeln!(self.output, "  {} =l alloc{} {}", temp, align, size)?;
         Ok(temp)
     }
-    fn alloc_ty(&mut self, ty: &ConcreteTy) -> io::Result<Temp> {
+    fn alloc_ty(&mut self, ty: &lir::Ty) -> io::Result<Temp> {
         self.alloc_size(size_bytes(ty), align_bytes(ty))
     }
     fn compile_stmt(&mut self, stmt: &Stmt) -> io::Result<()> {
         match stmt {
             Stmt::Alloc(ty) => {
-                let temp = self.alloc_ty(&ty.concrete())?;
+                let temp = self.alloc_ty(&ty)?;
                 self.stack_slots.push(temp);
             }
             Stmt::Assign { assign, expr, ty } => {
                 let temp = self.compile_expr(expr)?;
                 let addr = self.compile_assign(assign)?;
-                self.store(temp, &ty.concrete(), addr)?;
+                self.store(temp, &ty, addr)?;
             }
             Stmt::FuncCall(func_call) => {
                 let returns = self.compile_fn_call(func_call)?;
@@ -225,8 +219,8 @@ impl<'a, W: Write> Compiler<'a, W> {
                 writeln!(self.output, "  {} =l loadl {}", temp, addr)?;
                 temp
             }
-            Assign::Stack(stack_slot) => {
-                self.stack_slots[*stack_slot as usize]
+            Assign::Variable(var) => {
+                self.stack_slots[var.0 as usize]
             }
         })
     }
@@ -238,7 +232,6 @@ impl<'a, W: Write> Compiler<'a, W> {
             Expr::Binary { left, right, op: bin_op, ty } => {
                 let left_temp = self.compile_expr(left)?;
                 let right_temp = self.compile_expr(right)?;
-                let ty = ty.concrete();
                 let op = match bin_op {
                     BinaryOp::Add => "add",
                     BinaryOp::Subtract => "sub",
@@ -260,34 +253,33 @@ impl<'a, W: Write> Compiler<'a, W> {
                 writeln!(self.output, "  {} =w {} {}, {}", temp, op, left_temp, right_temp)?;
                 Value::Temp(temp)
             }
-            Expr::Load { stack_slot, ty } => {
-                let temp = self.stack_slots[*stack_slot as usize];
-                Value::Temp(self.load(&ty.concrete(), Value::Temp(temp))?)
+            Expr::Load { var, ty } => {
+                let temp = self.stack_slots[var.0 as usize];
+                Value::Temp(self.load(&ty, Value::Temp(temp))?)
             }
-            Expr::Ref(stack_slot) => {
-                Value::Temp(self.stack_slots[*stack_slot as usize])
+            Expr::Ref(var) => {
+                Value::Temp(self.stack_slots[var.0 as usize])
             }
             Expr::Deref { expr, ty } => {
                 let temp = self.compile_expr(expr)?;
-                Value::Temp(self.load(&ty.concrete(), temp)?)
+                Value::Temp(self.load(&ty, temp)?)
             }
             Expr::FuncCall(func_call) => {
                 let temp = self.compile_fn_call(func_call)?.unwrap();
                 Value::Temp(temp)
             }
             Expr::InitStruct(values) => {
-                let size = values.iter().fold(0, |size, value| align_to(size, align_bytes(&value.ty.concrete())) + size_bytes(&value.ty.concrete()));
-                let align = values.iter().map(|value| align_bytes(&value.ty.concrete())).max().unwrap_or(0);
+                let size = values.iter().fold(0, |size, value| align_to(size, align_bytes(&value.ty)) + size_bytes(&value.ty));
+                let align = values.iter().map(|value| align_bytes(&value.ty)).max().unwrap_or(0);
                 let temp = self.alloc_size(size, align)?;
                 let mut offset = 0;
                 for value in values {
-                    offset = align_to(offset, align_bytes(&value.ty.concrete()));
+                    offset = align_to(offset, align_bytes(&value.ty));
                     let offset_temp = self.new_temp();
                     writeln!(self.output, "  {} =l add {}, {}", offset_temp, temp, offset)?;
                     let expr_temp = self.compile_expr(&value.expr)?;
-                    let ty = value.ty.concrete();
-                    self.store(expr_temp, &ty, offset_temp)?;
-                    offset += size_bytes(&ty);
+                    self.store(expr_temp, &value.ty, offset_temp)?;
+                    offset += size_bytes(&value.ty);
                 }
                 Value::Temp(temp)
             }
@@ -317,7 +309,7 @@ impl<'a, W: Write> Compiler<'a, W> {
         writeln!(self.output, ")")?;
         Ok(temp)
     }
-    fn copy_struct(&mut self, src: Value, dest: Temp, tys: &[ConcreteTy]) -> io::Result<()> {
+    fn copy_struct(&mut self, src: Value, dest: Temp, tys: &[Ty]) -> io::Result<()> {
         let mut offset = 0;
         for ty in tys {
             offset = align_to(offset, align_bytes(ty));
@@ -334,12 +326,12 @@ impl<'a, W: Write> Compiler<'a, W> {
         }
         Ok(())
     }
-    fn store(&mut self, value: Value, ty: &ConcreteTy, addr: Temp) -> io::Result<()> {
+    fn store(&mut self, value: Value, ty: &Ty, addr: Temp) -> io::Result<()> {
         match ty {
-            ConcreteTy::Bool => {
+            Ty::Bool => {
                 writeln!(self.output, "  storeb {}, {}", value, addr)?;
             }
-            ConcreteTy::Int(ty) => {
+            Ty::Int(ty) => {
                 let op = match ty.size {
                     Size::B8 => "storeb",
                     Size::B16 => "storeh",
@@ -347,23 +339,23 @@ impl<'a, W: Write> Compiler<'a, W> {
                 };
                 writeln!(self.output, "  {} {}, {}", op, value, addr)?;
             }
-            ConcreteTy::Ref(_) => {
+            Ty::Ptr => {
                 writeln!(self.output, "  storel {}, {}", value, addr)?;
             }
-            ConcreteTy::Struct(tys) => {
+            Ty::Struct(tys) => {
                 self.copy_struct(value, addr, tys)?;
             }
         }
         Ok(())
     }
-    fn load(&mut self, ty: &ConcreteTy, addr: Value) -> io::Result<Temp> {
+    fn load(&mut self, ty: &Ty, addr: Value) -> io::Result<Temp> {
         Ok(match &ty {
-            ConcreteTy::Bool => {
+            Ty::Bool => {
                 let temp = self.new_temp();
                 writeln!(self.output, "  {} =w loadb {}", temp, addr)?;
                 temp
             }
-            ConcreteTy::Int(int) => {
+            Ty::Int(int) => {
                 let temp = self.new_temp();
                 let op = match (int.signedness, int.size) {
                     (Signedness::Signed, Size::B8) => "loadsb",
@@ -376,12 +368,12 @@ impl<'a, W: Write> Compiler<'a, W> {
                 writeln!(self.output, "  {} =w {} {}", temp, op, addr)?;
                 temp
             }
-            ConcreteTy::Ref(_) => {
+            Ty::Ptr => {
                 let temp = self.new_temp();
                 writeln!(self.output, "  {} =l loadl {}", temp, addr)?;
                 temp
             }
-            ConcreteTy::Struct(s) => {
+            Ty::Struct(s) => {
                 let temp = self.alloc_ty(ty)?;
                 self.copy_struct(addr, temp, s)?;
                 temp

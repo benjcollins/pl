@@ -91,7 +91,7 @@ pub enum Stmt {
 
 #[derive(Debug, Clone)]
 pub enum Ty {
-    Name(Symbol),
+    Struct(Symbol),
     Ref(Box<Ty>),
     Int(Int),
     Bool,

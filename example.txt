@@ -6,7 +6,11 @@ struct Point {
     y: i32
 }
 
+func new_point(x: i32, y: i32): Point {
+    return Point { x: x, y: y };
+}
+
 func main() {
-    var p = Point { x: 3, y: 9 };
+    var p = new_point(9, 7);
     print_point(&p);
 }

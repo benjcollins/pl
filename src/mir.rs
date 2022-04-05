@@ -4,9 +4,12 @@ use crate::{ty::{TyRef, IntTyRef}, symbols::Symbol};
 pub struct Func {
     pub name: Symbol,
     pub params: Vec<TyRef>,
-    pub returns: Option<TyRef>,
     pub blocks: Vec<Block>,
 }
+
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Variable(pub u32);
 
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -42,7 +45,7 @@ pub enum Stmt {
 #[derive(Debug, Clone)]
 pub enum Assign {
     Deref(Box<Assign>),
-    Stack(u32),
+    Variable(Variable),
 }
 
 #[derive(Debug, Clone)]
@@ -56,10 +59,10 @@ pub enum Expr {
     },
     Bool(bool),
     Load {
-        stack_slot: u32,
+        var: Variable,
         ty: TyRef,
     },
-    Ref(u32),
+    Ref(Variable),
     Deref {
         expr: Box<Expr>,
         ty: TyRef,

@@ -12,7 +12,7 @@ struct Compiler<'a> {
 #[derive(Debug, Clone)]
 struct Variable {
     name: Symbol,
-    stack_slot: u32,
+    var: mir::Variable,
     ty: TyRef,
 }
 
@@ -26,9 +26,9 @@ pub fn compile_fun(name: Symbol, func: &ast::Func, program: &ast::Program) -> Op
     let mut params = vec![];
     for param in &func.params {
         let ty = compile_ty(&param.ty, program);
-        let stack_slot = scope.len() as u32;
+        let var = mir::Variable(scope.len() as u32);
         params.push(ty.clone());
-        scope.push(Variable { name: param.name, ty, stack_slot });
+        scope.push(Variable { name: param.name, ty, var });
     }
     let mut compiler = Compiler {
         scope,
@@ -40,7 +40,6 @@ pub fn compile_fun(name: Symbol, func: &ast::Func, program: &ast::Program) -> Op
     compiler.compile_block(&body, &mut block_id);
     Some(mir::Func {
         blocks: compiler.blocks,
-        returns: compiler.returns,
         name,
         params,
     })
@@ -68,7 +67,7 @@ pub fn compile_ty(ty: &ast::Ty, program: &ast::Program) -> TyRef {
             ast::Int::U32 => Int { signedness: Signedness::Signed, size: Size::B32 },
         }))),
         ast::Ty::Bool => Ty::Bool,
-        ast::Ty::Name(name) => compile_struct(*name, program),
+        ast::Ty::Struct(name) => compile_struct(*name, program),
         ast::Ty::Ref(ty) => Ty::Ref(compile_ty(ty, program)),
     })
 }
@@ -115,9 +114,9 @@ impl<'a> Compiler<'a> {
                     *block_id = exit_block;
                 }
                 ast::Stmt::Let { ident, expr, ty: ast_ty } => {
-                    let stack_slot = self.scope.len() as u32;
+                    let var = mir::Variable(self.scope.len() as u32);
                     let ty = TyRef::new(Ty::Any);
-                    self.scope.push(Variable { name: *ident, stack_slot, ty: ty.clone() });
+                    self.scope.push(Variable { name: *ident, var, ty: ty.clone() });
                     self.push_stmt(*block_id, mir::Stmt::Alloc(ty.clone()));
 
                     if let Some(ast_ty) = ast_ty {
@@ -129,7 +128,7 @@ impl<'a> Compiler<'a> {
                         let (expr, expr_ty) = self.compile_expr(expr);
                         unify(&ty, &expr_ty).unwrap();
                         self.push_stmt(*block_id, mir::Stmt::Assign {
-                            assign: mir::Assign::Stack(stack_slot),
+                            assign: mir::Assign::Variable(var),
                             ty,
                             expr,
                         });
@@ -180,7 +179,7 @@ impl<'a> Compiler<'a> {
             }
             ast::Assign::Name(name) => {
                 let var = self.lookup_var(*name);
-                (mir::Assign::Stack(var.stack_slot), var.ty.clone())
+                (mir::Assign::Variable(var.var), var.ty.clone())
             }
         }
     }
@@ -241,7 +240,7 @@ impl<'a> Compiler<'a> {
             ast::Expr::Ident(ident) => {
                 let var = self.lookup_var(*ident);
                 (mir::Expr::Load {
-                    stack_slot: var.stack_slot,
+                    var: var.var,
                     ty: var.ty.clone(),
                 }, var.ty.clone())
             }
@@ -254,7 +253,7 @@ impl<'a> Compiler<'a> {
                 ast::PrefixOp::Ref => match &**expr {
                     ast::Expr::Ident(name) => {
                         let var = self.lookup_var(*name);
-                        (mir::Expr::Ref(var.stack_slot), TyRef::new(Ty::Ref(var.ty.clone())))
+                        (mir::Expr::Ref(var.var), TyRef::new(Ty::Ref(var.ty.clone())))
                     }
                     _ => panic!(),
                 }

@@ -1,6 +1,6 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
-use crate::{infer::{InferTyRef, Unify, unify}, symbols::Symbol};
+use crate::{infer::{InferTyRef, Unify, unify}, symbols::Symbol, lir};
 
 pub type TyRef = InferTyRef<Ty>;
 pub type IntTyRef = InferTyRef<IntTy>;
@@ -52,15 +52,8 @@ pub struct Field {
     pub ty: TyRef,
 }
 
-pub enum ConcreteTy {
-    Bool,
-    Ref(Box<ConcreteTy>),
-    Int(Int),
-    Struct(Vec<ConcreteTy>),
-}
-
 impl Unify for Ty {
-    type Concrete = ConcreteTy;
+    type Concrete = lir::Ty;
 
     fn unify(a: Ty, b: Ty) -> Result<Ty, ()> {
         Ok(match (a, b) {
@@ -75,10 +68,10 @@ impl Unify for Ty {
     }
     fn concrete(&self) -> Self::Concrete {
         match self {
-            Ty::Bool => ConcreteTy::Bool,
-            Ty::Ref(ty) => ConcreteTy::Ref(Box::new(ty.concrete())),
-            Ty::Int(ty) => ConcreteTy::Int(ty.concrete()),
-            Ty::Struct(ty) => ConcreteTy::Struct(ty.concrete()),
+            Ty::Bool => lir::Ty::Bool,
+            Ty::Ref(_) => lir::Ty::Ptr,
+            Ty::Int(ty) => lir::Ty::Int(ty.concrete()),
+            Ty::Struct(ty) => lir::Ty::Struct(ty.concrete()),
             Ty::Any => todo!(),
         }
     }
@@ -107,7 +100,7 @@ impl Unify for IntTy {
 }
 
 impl Unify for StructTy {
-    type Concrete = Vec<ConcreteTy>;
+    type Concrete = Vec<lir::Ty>;
     
     fn unify(a: Self, b: Self) -> Result<Self, ()> {
         Ok(match (a, b) {

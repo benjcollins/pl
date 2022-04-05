@@ -8,8 +8,12 @@ pub enum Ty {
     Struct(Vec<Ty>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Variable(u32);
+#[derive(Debug, Clone)]
+pub struct Func {
+    pub name: Symbol,
+    pub params: Vec<Ty>,
+    pub blocks: Vec<Block>,
+}
 
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -17,34 +21,31 @@ pub struct Block {
     pub branch: Branch,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct BlockId(pub u32);
-
 #[derive(Debug, Clone)]
 pub enum Branch {
     Return(Option<Expr>),
-    Static(BlockId),
+    Static(mir::BlockId),
     Condition {
         expr: Expr,
-        if_true: BlockId,
-        if_false: BlockId,
+        if_true: mir::BlockId,
+        if_false: mir::BlockId,
     },
 }
 
 #[derive(Debug, Clone)]
 pub enum Assign {
     Deref(Box<Assign>),
-    Assign {
-        var: Variable,
-        expr: Expr,
-        ty: Ty,
-    }
+    Variable(mir::Variable),
 }
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Alloc(Ty),
-    Assign(Assign),
+    Assign {
+        assign: Assign,
+        ty: Ty,
+        expr: Expr,
+    },
     FuncCall(FuncCall),
 }
 
@@ -59,19 +60,22 @@ pub enum Expr {
     },
     Bool(bool),
     Load {
-        var: Variable,
+        var: mir::Variable,
         ty: Ty,
     },
-    Ref(Variable),
+    Ref(mir::Variable),
     Deref {
         expr: Box<Expr>,
         ty: Ty,
     },
-    FnCall {
-        fn_call: FuncCall,
-        result: Ty,
-    },
-    InitStruct(Vec<Expr>),
+    FuncCall(FuncCall),
+    InitStruct(Vec<StructValue>),
+}
+
+#[derive(Debug, Clone)]
+pub struct StructValue {
+    pub ty: Ty,
+    pub expr: Expr,
 }
 
 #[derive(Debug, Clone)]

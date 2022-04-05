@@ -268,7 +268,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             TokenKind::Ident => {
                 let name = self.next().as_str(self.src);
-                Ty::Name(self.symbols.get_symbol(name))
+                Ty::Struct(self.symbols.get_symbol(name))
             }
             _ => Err(self.unexpected_token())?,
         })

@@ -11,6 +11,7 @@ mod symbols;
 mod infer;
 mod ty;
 mod lir;
+mod lower_mir;
 
 fn main() {
     let src = include_str!("../example.txt");
@@ -29,7 +30,8 @@ fn main() {
         qbe::compile_struct(*name, structure, &file, &symbols).unwrap();
     }
     for func_mir in &func_mirs {
-        qbe::compile_fun(func_mir, &file, &symbols, &program).unwrap();
+        let func_lir = lower_mir::lower_func(func_mir);
+        qbe::compile_fun(&func_lir, &file, &symbols, &program).unwrap();
     }
     Command::new("qbe/obj/qbe").args(["output.ssa", "-o", "output.S"]).status().unwrap();
     Command::new("gcc").args(["-o", "output", "main.c", "output.S"]).status().unwrap();
