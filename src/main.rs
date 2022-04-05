@@ -19,7 +19,7 @@ fn main() {
     let (program, symbols) = parser::parse(&tokens, src).unwrap();
     let mut func_mirs = vec![];
     for (name, func_ast) in &program.funcs {
-        if let Some(func_mir) = compiler::compile_fun(*name, func_ast, &program) {
+        if let Some(func_mir) = compiler::compile_func(*name, func_ast, &program) {
             // println!("{}", func_mir);
             func_mirs.push(func_mir);
         }

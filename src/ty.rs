@@ -72,7 +72,7 @@ impl Unify for Ty {
             Ty::Ref(_) => lir::Ty::Ptr,
             Ty::Int(ty) => lir::Ty::Int(ty.concrete()),
             Ty::Struct(ty) => lir::Ty::Struct(ty.concrete()),
-            Ty::Any => todo!(),
+            Ty::Any => panic!(),
         }
     }
 }

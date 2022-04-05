@@ -16,7 +16,7 @@ struct Variable {
     ty: TyRef,
 }
 
-pub fn compile_fun(name: Symbol, func: &ast::Func, program: &ast::Program) -> Option<mir::Func> {
+pub fn compile_func(name: Symbol, func: &ast::Func, program: &ast::Program) -> Option<mir::Func> {
     let body = match &func.body {
         Some(body) => body,
         None => return None,
@@ -72,7 +72,7 @@ pub fn compile_ty(ty: &ast::Ty, program: &ast::Program) -> TyRef {
     })
 }
 
-fn deref_ty<'a>(ty: &TyRef) -> TyRef {
+fn deref_ty(ty: &TyRef) -> TyRef {
     let any_ty = TyRef::new(Ty::Any);
     let ref_ty = TyRef::new(Ty::Ref(any_ty.clone()));
     unify(&ref_ty, ty).unwrap();
@@ -96,78 +96,81 @@ impl<'a> Compiler<'a> {
     }
     fn compile_block(&mut self, block: &ast::Block, block_id: &mut mir::BlockId) {
         for stmt in &block.stmts {
-            match stmt {
-                ast::Stmt::While { cond, body } => {
-                    let mut loop_block = self.new_block();
-                    let cond_block = self.new_block();
-                    let exit_block = self.new_block();
-                    self.set_branch(*block_id, mir::Branch::Static(cond_block));
-                    let (cond_expr, cond_ty) = self.compile_expr(cond);
-                    unify(&cond_ty, &TyRef::new(Ty::Bool)).unwrap();
-                    self.set_branch(cond_block, mir::Branch::Condition {
-                        expr: cond_expr,
-                        if_true: loop_block,
-                        if_false: exit_block,
-                    });
-                    self.compile_block(body, &mut loop_block);
-                    self.set_branch(loop_block, mir::Branch::Static(cond_block));
-                    *block_id = exit_block;
-                }
-                ast::Stmt::Let { ident, expr, ty: ast_ty } => {
-                    let var = mir::Variable(self.scope.len() as u32);
-                    let ty = TyRef::new(Ty::Any);
-                    self.scope.push(Variable { name: *ident, var, ty: ty.clone() });
-                    self.push_stmt(*block_id, mir::Stmt::Alloc(ty.clone()));
+            self.compile_stmt(stmt, block_id);
+        }
+    }
+    fn compile_stmt(&mut self, stmt: &ast::Stmt, block_id: &mut mir::BlockId) {
+        match stmt {
+            ast::Stmt::While { cond, body } => {
+                let mut loop_block = self.new_block();
+                let cond_block = self.new_block();
+                let exit_block = self.new_block();
+                self.set_branch(*block_id, mir::Branch::Static(cond_block));
+                let (cond_expr, cond_ty) = self.compile_expr(cond);
+                unify(&cond_ty, &TyRef::new(Ty::Bool)).unwrap();
+                self.set_branch(cond_block, mir::Branch::Condition {
+                    expr: cond_expr,
+                    if_true: loop_block,
+                    if_false: exit_block,
+                });
+                self.compile_block(body, &mut loop_block);
+                self.set_branch(loop_block, mir::Branch::Static(cond_block));
+                *block_id = exit_block;
+            }
+            ast::Stmt::Let { ident, expr, ty: ast_ty } => {
+                let var = mir::Variable(self.scope.len() as u32);
+                let ty = TyRef::new(Ty::Any);
+                self.scope.push(Variable { name: *ident, var, ty: ty.clone() });
+                self.push_stmt(*block_id, mir::Stmt::Alloc(ty.clone()));
 
-                    if let Some(ast_ty) = ast_ty {
-                        let ast_ty = compile_ty(ast_ty, self.program);
-                        unify(&ty, &ast_ty).unwrap();
-                    }
-                    
-                    if let Some(expr) = expr {
-                        let (expr, expr_ty) = self.compile_expr(expr);
-                        unify(&ty, &expr_ty).unwrap();
-                        self.push_stmt(*block_id, mir::Stmt::Assign {
-                            assign: mir::Assign::Variable(var),
-                            ty,
-                            expr,
-                        });
-                    }
+                if let Some(ast_ty) = ast_ty {
+                    let ast_ty = compile_ty(ast_ty, self.program);
+                    unify(&ty, &ast_ty).unwrap();
                 }
-                ast::Stmt::Assign { assign, expr } => {
+                
+                if let Some(expr) = expr {
                     let (expr, expr_ty) = self.compile_expr(expr);
-                    let (assign, ty) = self.compile_assign(assign);
-                    unify(&expr_ty, &ty).unwrap();
+                    unify(&ty, &expr_ty).unwrap();
                     self.push_stmt(*block_id, mir::Stmt::Assign {
-                        assign,
-                        expr,
+                        assign: mir::Assign::Variable(var),
                         ty,
+                        expr,
                     });
                 }
-                ast::Stmt::Return(expr) => {
-                    let expr = expr.as_ref().map(|expr| self.compile_expr(expr));
-                    let expr = match (expr, &self.returns) {
-                        (Some((expr, ty)), Some(returns)) => {
-                            unify(&returns, &ty).unwrap();
-                            Some(expr)
-                        },
-                        (None, None) => None,
-                        _ => panic!(),
-                    };
-                    self.set_branch(*block_id, mir::Branch::Return(expr));
-                    break
+            }
+            ast::Stmt::Assign { assign, expr } => {
+                let (expr, expr_ty) = self.compile_expr(expr);
+                let (assign, ty) = self.compile_assign(assign);
+                unify(&expr_ty, &ty).unwrap();
+                self.push_stmt(*block_id, mir::Stmt::Assign {
+                    assign,
+                    expr,
+                    ty,
+                });
+            }
+            ast::Stmt::Return(expr) => {
+                let expr = expr.as_ref().map(|expr| self.compile_expr(expr));
+                let expr = match (expr, &self.returns) {
+                    (Some((expr, ty)), Some(returns)) => {
+                        unify(&returns, &ty).unwrap();
+                        Some(expr)
+                    },
+                    (None, None) => None,
+                    _ => panic!(),
+                };
+                self.set_branch(*block_id, mir::Branch::Return(expr));
+                *block_id = self.new_block();
+            }
+            ast::Stmt::If(if_stmt) => self.compile_if(if_stmt, block_id),
+            ast::Stmt::FuncCall(fn_call) => {
+                let (args, ty) = self.compile_fn_call(fn_call);
+                if ty.is_some() {
+                    panic!()
                 }
-                ast::Stmt::If(if_stmt) => self.compile_if(if_stmt, block_id),
-                ast::Stmt::FuncCall(fn_call) => {
-                    let (args, ty) = self.compile_fn_call(fn_call);
-                    if ty.is_some() {
-                        panic!()
-                    }
-                    self.push_stmt(*block_id, mir::Stmt::FuncCall(mir::FuncCall {
-                        name: fn_call.name,
-                        args,
-                    }))
-                }
+                self.push_stmt(*block_id, mir::Stmt::FuncCall(mir::FuncCall {
+                    name: fn_call.name,
+                    args,
+                }))
             }
         }
     }
@@ -186,14 +189,14 @@ impl<'a> Compiler<'a> {
     fn compile_if(&mut self, if_stmt: &ast::If, block_id: &mut mir::BlockId) {
         let mut if_block = self.new_block();
         let mut else_block = self.new_block();
-        self.compile_block(&if_stmt.if_block, &mut if_block);
         let (cond_expr, cond_ty) = self.compile_expr(&if_stmt.cond);
-        unify(&cond_ty, &TyRef::new(Ty::Bool)).unwrap();
         self.set_branch(*block_id, mir::Branch::Condition {
             expr: cond_expr,
             if_true: if_block,
             if_false: else_block,
         });
+        self.compile_block(&if_stmt.if_block, &mut if_block);
+        unify(&cond_ty, &TyRef::new(Ty::Bool)).unwrap();
 
         match &if_stmt.else_block {
             ast::Else::Block(else_ast_block) => {

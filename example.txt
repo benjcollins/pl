@@ -10,7 +10,18 @@ func new_point(x: i32, y: i32): Point {
     return Point { x: x, y: y };
 }
 
+func fib(n: i32): i32 {
+    if n < 2 {
+        return 1;
+    } else {
+        return fib(n - 1) + fib(n - 2);
+    }
+}
+
 func main() {
-    var p = new_point(9, 7);
-    print_point(&p);
+    var i = 0;
+    while i < 20 {
+        print_int(fib(i));
+        i = i + 1;
+    }
 }
