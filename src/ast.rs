@@ -30,14 +30,24 @@ pub enum Expr {
         right: Box<Expr>,
         op: InfixOp,
     },
+    Ref(Box<RefExpr>),
     Prefix {
         op: PrefixOp,
         expr: Box<Expr>,
     },
-    FnCall(FuncCall),
+    FuncCall(FuncCall),
     InitStruct {
         name: Symbol,
         values: Vec<StructValue>
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum RefExpr {
+    Ident(Symbol),
+    Field {
+        expr: Box<Expr>,
+        name: Symbol,
     },
 }
 
@@ -48,15 +58,14 @@ pub struct StructValue {
 }
 
 #[derive(Debug, Clone)]
-pub enum Assign {
-    Deref(Box<Assign>),
-    Name(Symbol),
+pub enum DerefAssign {
+    Deref(Box<DerefAssign>),
+    Ident(Symbol),
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum PrefixOp {
     Deref,
-    Ref,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -77,7 +86,11 @@ pub enum Stmt {
         ty: Option<Ty>
     },
     Assign {
-        assign: Assign,
+        ref_expr: RefExpr,
+        expr: Expr,
+    },
+    DerefAssign {
+        assign: DerefAssign,
         expr: Expr
     },
     While {

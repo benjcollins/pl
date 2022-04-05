@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Assign, Param, FuncCall, Struct, StructField, Program, StructValue, Int}, symbols::Symbols};
+use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Param, FuncCall, Struct, StructField, Program, StructValue, Int, RefExpr, DerefAssign}, symbols::Symbols};
 
 pub fn parse<'a>(tokens: &'a [Token], src: &'a str) -> ParseResult<(Program, Symbols<'a>)> {
     let mut parser = Parser {
@@ -70,10 +70,19 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.eat_or_err(term)?;
         Ok(items)
     }
+    fn parse_ref_expr(&mut self) -> ParseResult<RefExpr> {
+        Ok(match self.peek() {
+            TokenKind::Ident => {
+                let ident = self.next().as_str(self.src);
+                RefExpr::Ident(self.symbols.get_symbol(ident))
+            }
+            _ => Err(self.unexpected_token())?
+        })
+    }
     fn parse_expr(&mut self, prec: Prec) -> ParseResult<Expr> {
         let mut left = match self.peek() {
             TokenKind::Asterisk => self.parse_prefix(PrefixOp::Deref, Prec::Ref)?,
-            TokenKind::Ampersand => self.parse_prefix(PrefixOp::Ref, Prec::Ref)?,
+            TokenKind::Ampersand => Expr::Ref(Box::new(self.parse_ref_expr()?)),
 
             TokenKind::Ident => {
                 let name = self.next().as_str(self.src);
@@ -82,7 +91,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     TokenKind::OpenBrace => {
                         self.next();
                         let args = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| parser.parse_expr(Prec::Bracket))?;
-                        Expr::FnCall(FuncCall { name: symbol, args })
+                        Expr::FuncCall(FuncCall { name: symbol, args })
                     }
                     TokenKind::OpenCurlyBrace => {
                         self.next();
@@ -166,15 +175,15 @@ impl<'a, 'b> Parser<'a, 'b> {
         };
         Ok(If { cond, if_block, else_block })
     }
-    fn parse_assign(&mut self) -> ParseResult<Assign> {
+    fn parse_deref_assign(&mut self) -> ParseResult<DerefAssign> {
         Ok(match self.peek() {
             TokenKind::Asterisk => {
                 self.next();
-                Assign::Deref(Box::new(self.parse_assign()?))
+                DerefAssign::Deref(Box::new(self.parse_deref_assign()?))
             }
             TokenKind::Ident => {
                 let name = self.next().as_str(self.src);
-                Assign::Name(self.symbols.get_symbol(name))
+                DerefAssign::Ident(self.symbols.get_symbol(name))
             }
             _ => Err(self.unexpected_token())?,
         })
@@ -231,17 +240,17 @@ impl<'a, 'b> Parser<'a, 'b> {
                 } else {
                     self.eat_or_err(TokenKind::Equals)?;
                     let expr = self.parse_expr(Prec::Bracket)?;
-                    Stmt::Assign { assign: Assign::Name(symbol), expr }
+                    Stmt::Assign { ref_expr: RefExpr::Ident(symbol), expr }
                 };
                 self.eat_or_err(TokenKind::Semicolon)?;
                 stmt
             }
             TokenKind::Asterisk => {
-                let assign = self.parse_assign()?;
+                let assign = self.parse_deref_assign()?;
                 self.eat_or_err(TokenKind::Equals)?;
                 let expr = self.parse_expr(Prec::Bracket)?;
                 self.eat_or_err(TokenKind::Semicolon)?;
-                Stmt::Assign { assign, expr }
+                Stmt::DerefAssign { assign, expr }
             }
             _ => Err(self.unexpected_token())?,
         })

@@ -261,7 +261,7 @@ impl<'a> Compiler<'a> {
                     _ => panic!(),
                 }
             }
-            ast::Expr::FnCall(fn_call) => {
+            ast::Expr::FuncCall(fn_call) => {
                 let (args, ty) = self.compile_fn_call(fn_call);
                 let result = ty.unwrap();
                 (mir::Expr::FuncCall(mir::FuncCall {
