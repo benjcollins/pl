@@ -43,6 +43,9 @@ pub fn lex<'a>(src: &'a str) -> Vec<Token> {
                 };
                 lexer.push_token(offset, kind);
             }
+            '#' => {
+                lexer.next_while(|ch| ch != '\n');
+            }
             '(' => lexer.single_char_token(TokenKind::OpenBrace),
             ')' => lexer.single_char_token(TokenKind::CloseBrace),
             '{' => lexer.single_char_token(TokenKind::OpenCurlyBrace),

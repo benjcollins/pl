@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Param, FuncCall, Struct, StructField, Program, StructValue, Int, RefExpr, DerefAssign}, symbols::Symbols};
+use crate::{token::{Token, TokenKind}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Param, FuncCall, Struct, StructField, Program, StructValue, Int, RefExpr}, symbols::Symbols};
 
 pub fn parse<'a>(tokens: &'a [Token], src: &'a str) -> ParseResult<(Program, Symbols<'a>)> {
     let mut parser = Parser {
@@ -82,7 +82,10 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn parse_expr(&mut self, prec: Prec) -> ParseResult<Expr> {
         let mut left = match self.peek() {
             TokenKind::Asterisk => self.parse_prefix(PrefixOp::Deref, Prec::Ref)?,
-            TokenKind::Ampersand => Expr::Ref(Box::new(self.parse_ref_expr()?)),
+            TokenKind::Ampersand => {
+                self.next();
+                Expr::Ref(Box::new(self.parse_ref_expr()?))
+            }
 
             TokenKind::Ident => {
                 let name = self.next().as_str(self.src);
@@ -175,19 +178,6 @@ impl<'a, 'b> Parser<'a, 'b> {
         };
         Ok(If { cond, if_block, else_block })
     }
-    fn parse_deref_assign(&mut self) -> ParseResult<DerefAssign> {
-        Ok(match self.peek() {
-            TokenKind::Asterisk => {
-                self.next();
-                DerefAssign::Deref(Box::new(self.parse_deref_assign()?))
-            }
-            TokenKind::Ident => {
-                let name = self.next().as_str(self.src);
-                DerefAssign::Ident(self.symbols.get_symbol(name))
-            }
-            _ => Err(self.unexpected_token())?,
-        })
-    }
     fn parse_stmt(&mut self) -> ParseResult<Stmt> {
         Ok(match self.peek() {
             TokenKind::If => {
@@ -246,7 +236,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 stmt
             }
             TokenKind::Asterisk => {
-                let assign = self.parse_deref_assign()?;
+                self.next();
+                let assign = self.parse_expr(Prec::Bracket)?;
                 self.eat_or_err(TokenKind::Equals)?;
                 let expr = self.parse_expr(Prec::Bracket)?;
                 self.eat_or_err(TokenKind::Semicolon)?;

@@ -1,4 +1,4 @@
-use crate::{ty::Int, mir, symbols::Symbol};
+use crate::{ty::Int, typed_ast, symbols::Symbol};
 
 #[derive(Debug, Clone)]
 pub enum Ty {
@@ -24,25 +24,24 @@ pub struct Block {
 #[derive(Debug, Clone)]
 pub enum Branch {
     Return(Option<Expr>),
-    Static(mir::BlockId),
+    Static(typed_ast::BlockId),
     Condition {
         expr: Expr,
-        if_true: mir::BlockId,
-        if_false: mir::BlockId,
+        if_true: typed_ast::BlockId,
+        if_false: typed_ast::BlockId,
     },
-}
-
-#[derive(Debug, Clone)]
-pub enum Assign {
-    Deref(Box<Assign>),
-    Variable(mir::Variable),
 }
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Alloc(Ty),
+    DerefAssign {
+        assign: Expr,
+        ty: Ty,
+        expr: Expr,
+    },
     Assign {
-        assign: Assign,
+        ref_expr: RefExpr,
         ty: Ty,
         expr: Expr,
     },
@@ -56,20 +55,25 @@ pub enum Expr {
         left: Box<Expr>,
         right: Box<Expr>,
         ty: Int,
-        op: mir::BinaryOp,
+        op: typed_ast::BinaryOp,
     },
     Bool(bool),
     Load {
-        var: mir::Variable,
+        var: typed_ast::Variable,
         ty: Ty,
     },
-    Ref(mir::Variable),
+    Ref(RefExpr),
     Deref {
         expr: Box<Expr>,
         ty: Ty,
     },
     FuncCall(FuncCall),
     InitStruct(Vec<StructValue>),
+}
+
+#[derive(Debug, Clone)]
+pub enum RefExpr {
+    Variable(typed_ast::Variable),
 }
 
 #[derive(Debug, Clone)]

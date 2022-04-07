@@ -57,12 +57,6 @@ pub struct StructValue {
     pub expr: Expr,
 }
 
-#[derive(Debug, Clone)]
-pub enum DerefAssign {
-    Deref(Box<DerefAssign>),
-    Ident(Symbol),
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum PrefixOp {
     Deref,
@@ -90,7 +84,7 @@ pub enum Stmt {
         expr: Expr,
     },
     DerefAssign {
-        assign: DerefAssign,
+        assign: Expr,
         expr: Expr
     },
     While {

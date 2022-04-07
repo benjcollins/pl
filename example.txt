@@ -18,13 +18,21 @@ func fib(n: i32): i32 {
     }
 }
 
+func sum(s: *i32, n: i32) {
+    *s = *s + n;
+}
+
 func main() {
     var p = point(9, 7);
     print_point(&p);
 
     var i = 0;
+    var s = 0;
     while i < 20 {
-        print_int(fib(i));
+        var f = fib(i);
+        print_int(f);
+        sum(&s, f);
         i = i + 1;
     }
+    print_int(s);
 }

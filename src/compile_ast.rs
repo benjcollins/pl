@@ -1,22 +1,22 @@
 use std::collections::HashSet;
 
-use crate::{ast, mir, ty::{TyRef, Ty, IntTyRef, IntTy, Signedness, Size, Int, StructTy, StructTyRef, Field}, infer::unify, symbols::Symbol};
+use crate::{ast, typed_ast, ty::{TyRef, Ty, IntTyRef, IntTy, Signedness, Size, Int, StructTy, StructTyRef, Field}, infer::unify, symbols::Symbol};
 
 struct Compiler<'a> {
     scope: Vec<Variable>,
     program: &'a ast::Program,
     returns: Option<TyRef>,
-    blocks: Vec<mir::Block>,
+    blocks: Vec<typed_ast::Block>,
 }
 
 #[derive(Debug, Clone)]
 struct Variable {
     name: Symbol,
-    var: mir::Variable,
+    var: typed_ast::Variable,
     ty: TyRef,
 }
 
-pub fn compile_func(name: Symbol, func: &ast::Func, program: &ast::Program) -> Option<mir::Func> {
+pub fn compile_func(name: Symbol, func: &ast::Func, program: &ast::Program) -> Option<typed_ast::Func> {
     let body = match &func.body {
         Some(body) => body,
         None => return None,
@@ -26,7 +26,7 @@ pub fn compile_func(name: Symbol, func: &ast::Func, program: &ast::Program) -> O
     let mut params = vec![];
     for param in &func.params {
         let ty = compile_ty(&param.ty, program);
-        let var = mir::Variable(scope.len() as u32);
+        let var = typed_ast::Variable(scope.len() as u32);
         params.push(ty.clone());
         scope.push(Variable { name: param.name, ty, var });
     }
@@ -38,7 +38,7 @@ pub fn compile_func(name: Symbol, func: &ast::Func, program: &ast::Program) -> O
     };
     let mut block_id = compiler.new_block();
     compiler.compile_block(&body, &mut block_id);
-    Some(mir::Func {
+    Some(typed_ast::Func {
         blocks: compiler.blocks,
         name,
         params,
@@ -80,48 +80,48 @@ fn deref_ty(ty: &TyRef) -> TyRef {
 }
 
 impl<'a> Compiler<'a> {
-    fn new_block(&mut self) -> mir::BlockId {
-        let id = mir::BlockId(self.blocks.len() as u32);
-        self.blocks.push(mir::Block {
+    fn new_block(&mut self) -> typed_ast::BlockId {
+        let id = typed_ast::BlockId(self.blocks.len() as u32);
+        self.blocks.push(typed_ast::Block {
             stmts: vec![],
-            branch: mir::Branch::Return(None),
+            branch: typed_ast::Branch::Return(None),
         });
         id
     }
-    fn push_stmt(&mut self, id: mir::BlockId, stmt: mir::Stmt) {
+    fn push_stmt(&mut self, id: typed_ast::BlockId, stmt: typed_ast::Stmt) {
         self.blocks[id.0 as usize].stmts.push(stmt);
     }
-    fn set_branch(&mut self, id: mir::BlockId, branch: mir::Branch) {
+    fn set_branch(&mut self, id: typed_ast::BlockId, branch: typed_ast::Branch) {
         self.blocks[id.0 as usize].branch = branch;
     }
-    fn compile_block(&mut self, block: &ast::Block, block_id: &mut mir::BlockId) {
+    fn compile_block(&mut self, block: &ast::Block, block_id: &mut typed_ast::BlockId) {
         for stmt in &block.stmts {
             self.compile_stmt(stmt, block_id);
         }
     }
-    fn compile_stmt(&mut self, stmt: &ast::Stmt, block_id: &mut mir::BlockId) {
+    fn compile_stmt(&mut self, stmt: &ast::Stmt, block_id: &mut typed_ast::BlockId) {
         match stmt {
             ast::Stmt::While { cond, body } => {
                 let mut loop_block = self.new_block();
                 let cond_block = self.new_block();
                 let exit_block = self.new_block();
-                self.set_branch(*block_id, mir::Branch::Static(cond_block));
+                self.set_branch(*block_id, typed_ast::Branch::Static(cond_block));
                 let (cond_expr, cond_ty) = self.compile_expr(cond);
                 unify(&cond_ty, &TyRef::new(Ty::Bool)).unwrap();
-                self.set_branch(cond_block, mir::Branch::Condition {
+                self.set_branch(cond_block, typed_ast::Branch::Condition {
                     expr: cond_expr,
                     if_true: loop_block,
                     if_false: exit_block,
                 });
                 self.compile_block(body, &mut loop_block);
-                self.set_branch(loop_block, mir::Branch::Static(cond_block));
+                self.set_branch(loop_block, typed_ast::Branch::Static(cond_block));
                 *block_id = exit_block;
             }
             ast::Stmt::Let { ident, expr, ty: ast_ty } => {
-                let var = mir::Variable(self.scope.len() as u32);
+                let var = typed_ast::Variable(self.scope.len() as u32);
                 let ty = TyRef::new(Ty::Any);
                 self.scope.push(Variable { name: *ident, var, ty: ty.clone() });
-                self.push_stmt(*block_id, mir::Stmt::Alloc(ty.clone()));
+                self.push_stmt(*block_id, typed_ast::Stmt::Alloc(ty.clone()));
 
                 if let Some(ast_ty) = ast_ty {
                     let ast_ty = compile_ty(ast_ty, self.program);
@@ -131,22 +131,24 @@ impl<'a> Compiler<'a> {
                 if let Some(expr) = expr {
                     let (expr, expr_ty) = self.compile_expr(expr);
                     unify(&ty, &expr_ty).unwrap();
-                    self.push_stmt(*block_id, mir::Stmt::Assign {
-                        assign: mir::Assign::Variable(var),
+                    self.push_stmt(*block_id, typed_ast::Stmt::Assign {
+                        ref_expr: typed_ast::RefExpr::Variable(var),
                         ty,
                         expr,
                     });
                 }
             }
-            ast::Stmt::Assign { assign, expr } => {
+            ast::Stmt::Assign { ref_expr, expr } => {
+                let (ref_expr, ref_ty) = self.compile_ref_expr(ref_expr);
+                let (expr, ty) = self.compile_expr(expr);
+                unify(&ref_ty, &ty).unwrap();
+                self.push_stmt(*block_id, typed_ast::Stmt::Assign { ref_expr, expr, ty })
+            }
+            ast::Stmt::DerefAssign { assign, expr } => {
                 let (expr, expr_ty) = self.compile_expr(expr);
-                let (assign, ty) = self.compile_assign(assign);
-                unify(&expr_ty, &ty).unwrap();
-                self.push_stmt(*block_id, mir::Stmt::Assign {
-                    assign,
-                    expr,
-                    ty,
-                });
+                let (assign, ty) = self.compile_expr(assign);
+                unify(&expr_ty, &deref_ty(&ty)).unwrap();
+                self.push_stmt(*block_id, typed_ast::Stmt::DerefAssign { assign, expr, ty: expr_ty });
             }
             ast::Stmt::Return(expr) => {
                 let expr = expr.as_ref().map(|expr| self.compile_expr(expr));
@@ -158,7 +160,7 @@ impl<'a> Compiler<'a> {
                     (None, None) => None,
                     _ => panic!(),
                 };
-                self.set_branch(*block_id, mir::Branch::Return(expr));
+                self.set_branch(*block_id, typed_ast::Branch::Return(expr));
                 *block_id = self.new_block();
             }
             ast::Stmt::If(if_stmt) => self.compile_if(if_stmt, block_id),
@@ -167,30 +169,39 @@ impl<'a> Compiler<'a> {
                 if ty.is_some() {
                     panic!()
                 }
-                self.push_stmt(*block_id, mir::Stmt::FuncCall(mir::FuncCall {
+                self.push_stmt(*block_id, typed_ast::Stmt::FuncCall(typed_ast::FuncCall {
                     name: fn_call.name,
                     args,
                 }))
             }
         }
     }
-    fn compile_assign(&mut self, assign: &ast::Assign) -> (mir::Assign, TyRef) {
-        match assign {
-            ast::Assign::Deref(assign) => {
-                let (assign, ty) = self.compile_assign(assign);
-                (mir::Assign::Deref(Box::new(assign)), deref_ty(&ty))
-            }
-            ast::Assign::Name(name) => {
+    fn compile_ref_expr(&mut self, ref_expr: &ast::RefExpr) -> (typed_ast::RefExpr, TyRef) {
+        match ref_expr {
+            ast::RefExpr::Ident(name) => {
                 let var = self.lookup_var(*name);
-                (mir::Assign::Variable(var.var), var.ty.clone())
+                (typed_ast::RefExpr::Variable(var.var), var.ty.clone())
             }
+            ast::RefExpr::Field { .. } => todo!(),
         }
     }
-    fn compile_if(&mut self, if_stmt: &ast::If, block_id: &mut mir::BlockId) {
+    // fn compile_deref_assign(&mut self, assign: &ast::DerefAssign) -> (typed_ast::DerefAssign, TyRef) {
+    //     match assign {
+    //         ast::DerefAssign::Deref(assign) => {
+    //             let (assign, ty) = self.compile_deref_assign(assign);
+    //             (typed_ast::DerefAssign::Deref(Box::new(assign)), deref_ty(&ty))
+    //         }
+    //         ast::DerefAssign::Ident(name) => {
+    //             let var = self.lookup_var(*name);
+    //             (typed_ast::DerefAssign::Variable(var.var), var.ty.clone())
+    //         }
+    //     }
+    // }
+    fn compile_if(&mut self, if_stmt: &ast::If, block_id: &mut typed_ast::BlockId) {
         let mut if_block = self.new_block();
         let mut else_block = self.new_block();
         let (cond_expr, cond_ty) = self.compile_expr(&if_stmt.cond);
-        self.set_branch(*block_id, mir::Branch::Condition {
+        self.set_branch(*block_id, typed_ast::Branch::Condition {
             expr: cond_expr,
             if_true: if_block,
             if_false: else_block,
@@ -202,17 +213,17 @@ impl<'a> Compiler<'a> {
             ast::Else::Block(else_ast_block) => {
                 let exit_block_id = self.new_block();
                 self.compile_block(else_ast_block, &mut else_block);
-                self.set_branch(else_block, mir::Branch::Static(exit_block_id));
-                self.set_branch(if_block, mir::Branch::Static(exit_block_id));
+                self.set_branch(else_block, typed_ast::Branch::Static(exit_block_id));
+                self.set_branch(if_block, typed_ast::Branch::Static(exit_block_id));
                 *block_id = exit_block_id;
             }
             ast::Else::If(if_stmt) => {
                 self.compile_if(if_stmt, &mut else_block);
-                self.set_branch(if_block, mir::Branch::Static(else_block));
+                self.set_branch(if_block, typed_ast::Branch::Static(else_block));
                 *block_id = else_block;
             }
             ast::Else::None => {
-                self.set_branch(if_block, mir::Branch::Static(else_block));
+                self.set_branch(if_block, typed_ast::Branch::Static(else_block));
                 *block_id = else_block;
             }
         }
@@ -220,51 +231,48 @@ impl<'a> Compiler<'a> {
     fn lookup_var(&self, name: Symbol) -> &Variable {
         self.scope.iter().find(|var| var.name == name).unwrap()
     }
-    fn compile_expr(&mut self, expr: &ast::Expr) -> (mir::Expr, TyRef) {
+    fn compile_expr(&mut self, expr: &ast::Expr) -> (typed_ast::Expr, TyRef) {
         match expr {
             ast::Expr::Integer(value) => {
                 let int_ty = IntTyRef::new(IntTy::Any);
-                (mir::Expr::Int(*value), TyRef::new(Ty::Int(int_ty)))
+                (typed_ast::Expr::Int(*value), TyRef::new(Ty::Int(int_ty)))
             }
             ast::Expr::Bool(value) =>  {
-                (mir::Expr::Bool(*value), TyRef::new(Ty::Bool))
+                (typed_ast::Expr::Bool(*value), TyRef::new(Ty::Bool))
             }
             ast::Expr::Infix { left, right, op } => {
                 match op {
-                    ast::InfixOp::Add => self.compile_arth_expr(left, right, mir::BinaryOp::Add),
-                    ast::InfixOp::Subtract => self.compile_arth_expr(left, right, mir::BinaryOp::Subtract),
-                    ast::InfixOp::Multiply => self.compile_arth_expr(left, right, mir::BinaryOp::Multiply),
-                    ast::InfixOp::Divide => self.compile_arth_expr(left, right, mir::BinaryOp::Divide),
+                    ast::InfixOp::Add => self.compile_arth_expr(left, right, typed_ast::BinaryOp::Add),
+                    ast::InfixOp::Subtract => self.compile_arth_expr(left, right, typed_ast::BinaryOp::Subtract),
+                    ast::InfixOp::Multiply => self.compile_arth_expr(left, right, typed_ast::BinaryOp::Multiply),
+                    ast::InfixOp::Divide => self.compile_arth_expr(left, right, typed_ast::BinaryOp::Divide),
 
-                    ast::InfixOp::LessThan => self.compile_cmp_expr(left, right, mir::BinaryOp::LessThan),
-                    ast::InfixOp::GreaterThan => self.compile_cmp_expr(left, right, mir::BinaryOp::GreaterThan),
+                    ast::InfixOp::LessThan => self.compile_cmp_expr(left, right, typed_ast::BinaryOp::LessThan),
+                    ast::InfixOp::GreaterThan => self.compile_cmp_expr(left, right, typed_ast::BinaryOp::GreaterThan),
                 }
             }
             ast::Expr::Ident(ident) => {
                 let var = self.lookup_var(*ident);
-                (mir::Expr::Load {
+                (typed_ast::Expr::Load {
                     var: var.var,
                     ty: var.ty.clone(),
                 }, var.ty.clone())
+            }
+            ast::Expr::Ref(ref_expr) => {
+                let (ref_expr, ty) = self.compile_ref_expr(ref_expr);
+                (typed_ast::Expr::Ref(ref_expr), TyRef::new(Ty::Ref(ty)))
             }
             ast::Expr::Prefix { op, expr } => match op {
                 ast::PrefixOp::Deref => {
                     let (expr, ty) = self.compile_expr(expr);
                     let ty = deref_ty(&ty);
-                    (mir::Expr::Deref { expr: Box::new(expr), ty: ty.clone() }, ty)
-                }
-                ast::PrefixOp::Ref => match &**expr {
-                    ast::Expr::Ident(name) => {
-                        let var = self.lookup_var(*name);
-                        (mir::Expr::Ref(var.var), TyRef::new(Ty::Ref(var.ty.clone())))
-                    }
-                    _ => panic!(),
+                    (typed_ast::Expr::Deref { expr: Box::new(expr), ty: ty.clone() }, ty)
                 }
             }
             ast::Expr::FuncCall(fn_call) => {
                 let (args, ty) = self.compile_fn_call(fn_call);
                 let result = ty.unwrap();
-                (mir::Expr::FuncCall(mir::FuncCall {
+                (typed_ast::Expr::FuncCall(typed_ast::FuncCall {
                     name: fn_call.name,
                     args,
                 }), result)
@@ -284,15 +292,15 @@ impl<'a> Compiler<'a> {
                     let field_ty = compile_ty(&field.ty, self.program);
                     unify(&ty, &field_ty).unwrap();
                     tys.push(field_ty);
-                    mir_values.push(mir::StructValue { ty, expr });
+                    mir_values.push(typed_ast::StructValue { ty, expr });
                 }
                 let ty = TyRef::new(compile_struct(*name, self.program));
-                (mir::Expr::InitStruct(mir_values), ty)
+                (typed_ast::Expr::InitStruct(mir_values), ty)
             }
             ast::Expr::Field { .. } => todo!(),
         }
     }
-    fn compile_fn_call(&mut self, fn_call: &ast::FuncCall) -> (Vec<mir::Expr>, Option<TyRef>) {
+    fn compile_fn_call(&mut self, fn_call: &ast::FuncCall) -> (Vec<typed_ast::Expr>, Option<TyRef>) {
         let func = self.program.funcs.get(&fn_call.name).unwrap();
         if fn_call.args.len() != func.params.len() {
             panic!()
@@ -305,21 +313,21 @@ impl<'a> Compiler<'a> {
         }).collect();
         (args, func.returns.as_ref().map(|ty| compile_ty(ty, self.program)))
     }
-    fn compile_arth_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::BinaryOp) -> (mir::Expr, TyRef) {
+    fn compile_arth_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: typed_ast::BinaryOp) -> (typed_ast::Expr, TyRef) {
         let (left_expr, left_ty) = self.compile_expr(left);
         let (right_expr, right_ty) = self.compile_expr(right);
         let int_ty = IntTyRef::new(IntTy::Any);
         let ty = TyRef::new(Ty::Int(int_ty.clone()));
         unify(&ty, &left_ty).unwrap();
         unify(&ty, &right_ty).unwrap();
-        (mir::Expr::Binary {
+        (typed_ast::Expr::Binary {
             left: Box::new(left_expr),
             right: Box::new(right_expr),
             ty: int_ty,
             op,
         }, ty)
     }
-    fn compile_cmp_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: mir::BinaryOp) -> (mir::Expr, TyRef) {
+    fn compile_cmp_expr(&mut self, left: &ast::Expr, right: &ast::Expr, op: typed_ast::BinaryOp) -> (typed_ast::Expr, TyRef) {
         let (left_expr, left_ty) = self.compile_expr(left);
         let (right_expr, right_ty) = self.compile_expr(right);
         let int_ty = IntTyRef::new(IntTy::Any);
@@ -327,7 +335,7 @@ impl<'a> Compiler<'a> {
         let bool_ty = TyRef::new(Ty::Bool);
         unify(&ty, &left_ty).unwrap();
         unify(&ty, &right_ty).unwrap();
-        (mir::Expr::Binary {
+        (typed_ast::Expr::Binary {
             left: Box::new(left_expr),
             right: Box::new(right_expr),
             ty: int_ty,

@@ -4,14 +4,14 @@ mod token;
 mod lexer;
 mod ast;
 mod parser;
-mod compiler;
-mod mir;
+mod compile_ast;
+mod typed_ast;
 mod qbe;
 mod symbols;
 mod infer;
 mod ty;
-mod lir;
-mod lower_mir;
+mod ir;
+mod compile_typed_ast;
 
 fn main() {
     let src = include_str!("../example.txt");
@@ -19,7 +19,7 @@ fn main() {
     let (program, symbols) = parser::parse(&tokens, src).unwrap();
     let mut func_mirs = vec![];
     for (name, func_ast) in &program.funcs {
-        if let Some(func_mir) = compiler::compile_func(*name, func_ast, &program) {
+        if let Some(func_mir) = compile_ast::compile_func(*name, func_ast, &program) {
             // println!("{}", func_mir);
             func_mirs.push(func_mir);
         }
@@ -30,7 +30,7 @@ fn main() {
         qbe::compile_struct(*name, structure, &file, &symbols).unwrap();
     }
     for func_mir in &func_mirs {
-        let func_lir = lower_mir::lower_func(func_mir);
+        let func_lir = compile_typed_ast::lower_func(func_mir);
         qbe::compile_fun(&func_lir, &file, &symbols, &program).unwrap();
     }
     Command::new("qbe/obj/qbe").args(["output.ssa", "-o", "output.S"]).status().unwrap();

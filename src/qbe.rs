@@ -1,6 +1,6 @@
 use std::{io::{Write, self}, fmt};
 
-use crate::{ty::{Size, Signedness}, ast, symbols::{Symbols, Symbol}, lir::{self, Stmt, Assign, Branch, Expr, Ty, FuncCall}, mir::BinaryOp};
+use crate::{ty::{Size, Signedness}, ast, symbols::{Symbols, Symbol}, ir, typed_ast::BinaryOp};
 
 struct Compiler<'a, W: Write> {
     stack_slots: Vec<Temp>,
@@ -21,16 +21,16 @@ enum Value {
 #[derive(Debug, Clone, Copy)]
 struct Label(u32);
 
-fn size_bytes(ty: &lir::Ty) -> u32 {
+fn size_bytes(ty: &ir::Ty) -> u32 {
     match ty {
-        lir::Ty::Bool => 1,
-        lir::Ty::Int(int_ty) => match int_ty.size {
+        ir::Ty::Bool => 1,
+        ir::Ty::Int(int_ty) => match int_ty.size {
             Size::B8 => 1,
             Size::B16 => 2,
             Size::B32 => 4,
         }
-        lir::Ty::Ptr => 8,
-        lir::Ty::Struct(fields) => {
+        ir::Ty::Ptr => 8,
+        ir::Ty::Struct(fields) => {
             let mut size = 0;
             for ty in fields {
                 size = align_to(size, align_bytes(ty)) + size_bytes(ty);
@@ -44,16 +44,16 @@ fn align_to(offset: u32, align: u32) -> u32 {
     (offset + align - 1) & !(align-1)
 }
 
-fn align_bytes(ty: &lir::Ty) -> u32 {
+fn align_bytes(ty: &ir::Ty) -> u32 {
     match ty {
-        lir::Ty::Bool => 1,
-        lir::Ty::Int(int_ty) => match int_ty.size {
+        ir::Ty::Bool => 1,
+        ir::Ty::Int(int_ty) => match int_ty.size {
             Size::B8 => 1,
             Size::B16 => 2,
             Size::B32 => 4,
         }
-        lir::Ty::Ptr => 8,
-        lir::Ty::Struct(fields) => {
+        ir::Ty::Ptr => 8,
+        ir::Ty::Struct(fields) => {
             let mut max = 0;
             for ty in fields {
                 let align =  align_bytes(ty);
@@ -109,7 +109,7 @@ impl fmt::Display for Label {
     }
 }
 
-pub fn compile_fun<'a, W: Write>(func: &lir::Func, output: W, symbols: &'a Symbols<'a>, program: &ast::Program) -> io::Result<()> {
+pub fn compile_fun<'a, W: Write>(func: &ir::Func, output: W, symbols: &'a Symbols<'a>, program: &ast::Program) -> io::Result<()> {
     let mut compiler = Compiler {
         stack_slots: vec![],
         temp_count: 0,
@@ -136,7 +136,7 @@ pub fn compile_fun<'a, W: Write>(func: &lir::Func, output: W, symbols: &'a Symbo
     for (temp, ty) in param_temps.iter().zip(&func.params) {
         let addr = compiler.alloc_ty(&ty)?;
         compiler.stack_slots.push(addr);
-        compiler.store(Value::Temp(*temp), &ty, addr)?;
+        compiler.store(Value::Temp(*temp), &ty, Value::Temp(addr))?;
     }
     for (id, block) in func.blocks.iter().enumerate() {
         writeln!(compiler.output, "{}", Label(id as u32))?;
@@ -155,12 +155,12 @@ pub fn compile_struct<W: Write>(name: Symbol, structure: &ast::Struct, mut outpu
 }
 
 impl<'a, W: Write> Compiler<'a, W> {
-    fn compile_block<'s>(&mut self, block: &lir::Block) -> io::Result<()> {
+    fn compile_block<'s>(&mut self, block: &ir::Block) -> io::Result<()> {
         for stmt in &block.stmts {
             self.compile_stmt(stmt)?;
         }
         match &block.branch {
-            Branch::Return(expr) => {
+            ir::Branch::Return(expr) => {
                 match expr {
                     Some(expr) => {
                         let temp = self.compile_expr(expr)?;
@@ -169,8 +169,8 @@ impl<'a, W: Write> Compiler<'a, W> {
                     None => writeln!(self.output, "  ret")?,
                 }
             }
-            Branch::Static(target) => writeln!(self.output, "  jmp {}", Label(target.0))?,
-            Branch::Condition { expr, if_true, if_false } => {
+            ir::Branch::Static(target) => writeln!(self.output, "  jmp {}", Label(target.0))?,
+            ir::Branch::Condition { expr, if_true, if_false } => {
                 let temp = self.compile_expr(&expr)?;
                 writeln!(self.output, "  jnz {}, {}, {}", temp, Label(if_true.0), Label(if_false.0))?;
             }
@@ -188,21 +188,26 @@ impl<'a, W: Write> Compiler<'a, W> {
         writeln!(self.output, "  {} =l alloc{} {}", temp, align, size)?;
         Ok(temp)
     }
-    fn alloc_ty(&mut self, ty: &lir::Ty) -> io::Result<Temp> {
+    fn alloc_ty(&mut self, ty: &ir::Ty) -> io::Result<Temp> {
         self.alloc_size(size_bytes(ty), align_bytes(ty))
     }
-    fn compile_stmt(&mut self, stmt: &Stmt) -> io::Result<()> {
+    fn compile_stmt(&mut self, stmt: &ir::Stmt) -> io::Result<()> {
         match stmt {
-            Stmt::Alloc(ty) => {
+            ir::Stmt::Alloc(ty) => {
                 let temp = self.alloc_ty(&ty)?;
                 self.stack_slots.push(temp);
             }
-            Stmt::Assign { assign, expr, ty } => {
+            ir::Stmt::Assign { ref_expr, ty, expr } => {
+                let addr = self.compile_ref_expr(ref_expr);
                 let temp = self.compile_expr(expr)?;
-                let addr = self.compile_assign(assign)?;
                 self.store(temp, &ty, addr)?;
             }
-            Stmt::FuncCall(func_call) => {
+            ir::Stmt::DerefAssign { assign, expr, ty } => {
+                let temp = self.compile_expr(expr)?;
+                let addr = self.compile_expr(assign)?;
+                self.store(temp, &ty, addr)?;
+            }
+            ir::Stmt::FuncCall(func_call) => {
                 let returns = self.compile_func_call(func_call)?;
                 if returns.is_some() {
                     panic!()
@@ -211,25 +216,25 @@ impl<'a, W: Write> Compiler<'a, W> {
         };
         Ok(())
     }
-    fn compile_assign(&mut self, assign: &Assign) -> io::Result<Temp> {
-        Ok(match assign {
-            Assign::Deref(assign) => {
-                let addr = self.compile_assign(assign)?;
-                let temp = self.new_temp();
-                writeln!(self.output, "  {} =l loadl {}", temp, addr)?;
-                temp
-            }
-            Assign::Variable(var) => {
-                self.stack_slots[var.0 as usize]
-            }
-        })
-    }
-    fn compile_expr(&mut self, expr: &Expr) -> io::Result<Value> {
+    // fn compile_deref_assign(&mut self, assign: &DerefAssign) -> io::Result<Temp> {
+    //     Ok(match assign {
+    //         Assign::Deref(assign) => {
+    //             let addr = self.compile_deref_assign(assign)?;
+    //             let temp = self.new_temp();
+    //             writeln!(self.output, "  {} =l loadl {}", temp, addr)?;
+    //             temp
+    //         }
+    //         ir::Assign::Variable(var) => {
+    //             self.stack_slots[var.0 as usize]
+    //         }
+    //     })
+    // }
+    fn compile_expr(&mut self, expr: &ir::Expr) -> io::Result<Value> {
         Ok(match expr {
-            Expr::Int(value) => Value::Const(*value),
-            Expr::Bool(value) => Value::Const(if *value { 1 } else { 0 }),
+            ir::Expr::Int(value) => Value::Const(*value),
+            ir::Expr::Bool(value) => Value::Const(if *value { 1 } else { 0 }),
 
-            Expr::Binary { left, right, op: bin_op, ty } => {
+            ir::Expr::Binary { left, right, op: bin_op, ty } => {
                 let left_temp = self.compile_expr(left)?;
                 let right_temp = self.compile_expr(right)?;
                 let op = match bin_op {
@@ -253,22 +258,24 @@ impl<'a, W: Write> Compiler<'a, W> {
                 writeln!(self.output, "  {} =w {} {}, {}", temp, op, left_temp, right_temp)?;
                 Value::Temp(temp)
             }
-            Expr::Load { var, ty } => {
+            ir::Expr::Load { var, ty } => {
                 let temp = self.stack_slots[var.0 as usize];
                 self.load(&ty, Value::Temp(temp))?
             }
-            Expr::Ref(var) => {
-                Value::Temp(self.stack_slots[var.0 as usize])
+            ir::Expr::Ref(ref_expr) => {
+                match ref_expr {
+                    ir::RefExpr::Variable(var) => Value::Temp(self.stack_slots[var.0 as usize]),
+                }
             }
-            Expr::Deref { expr, ty } => {
+            ir::Expr::Deref { expr, ty } => {
                 let temp = self.compile_expr(expr)?;
                 self.load(&ty, temp)?
             }
-            Expr::FuncCall(func_call) => {
+            ir::Expr::FuncCall(func_call) => {
                 let temp = self.compile_func_call(func_call)?.unwrap();
                 Value::Temp(temp)
             }
-            Expr::InitStruct(values) => {
+            ir::Expr::InitStruct(values) => {
                 let size = values.iter().fold(0, |size, value| align_to(size, align_bytes(&value.ty)) + size_bytes(&value.ty));
                 let align = values.iter().map(|value| align_bytes(&value.ty)).max().unwrap_or(0);
                 let temp = self.alloc_size(size, align)?;
@@ -278,14 +285,19 @@ impl<'a, W: Write> Compiler<'a, W> {
                     let offset_temp = self.new_temp();
                     writeln!(self.output, "  {} =l add {}, {}", offset_temp, temp, offset)?;
                     let expr_temp = self.compile_expr(&value.expr)?;
-                    self.store(expr_temp, &value.ty, offset_temp)?;
+                    self.store(expr_temp, &value.ty, Value::Temp(offset_temp))?;
                     offset += size_bytes(&value.ty);
                 }
                 Value::Temp(temp)
             }
         })
     }
-    fn compile_func_call(&mut self, func_call: &FuncCall) -> io::Result<Option<Temp>> {
+    fn compile_ref_expr(&self, ref_expr: &ir::RefExpr) -> Value {
+        match ref_expr {
+            ir::RefExpr::Variable(var) => Value::Temp(self.stack_slots[var.0 as usize]),
+        }
+    }
+    fn compile_func_call(&mut self, func_call: &ir::FuncCall) -> io::Result<Option<Temp>> {
         let func = self.program.funcs.get(&func_call.name).unwrap();
 
         let values: Vec<_> = func_call.args.iter().map(|expr| self.compile_expr(&expr).unwrap()).collect();
@@ -309,7 +321,7 @@ impl<'a, W: Write> Compiler<'a, W> {
         writeln!(self.output, ")")?;
         Ok(temp)
     }
-    fn copy_struct(&mut self, src: Value, dest: Temp, tys: &[Ty]) -> io::Result<()> {
+    fn copy_struct(&mut self, src: Value, dest: Value, tys: &[ir::Ty]) -> io::Result<()> {
         let mut offset = 0;
         for ty in tys {
             offset = align_to(offset, align_bytes(ty));
@@ -321,17 +333,17 @@ impl<'a, W: Write> Compiler<'a, W> {
             let dest_off = self.new_temp();
             writeln!(self.output, "  {} =l add {}, {}", dest_off, dest, offset)?;
             
-            self.store(value, ty, dest_off)?;
+            self.store(value, ty, Value::Temp(dest_off))?;
             offset += size_bytes(ty);
         }
         Ok(())
     }
-    fn store(&mut self, value: Value, ty: &Ty, addr: Temp) -> io::Result<()> {
+    fn store(&mut self, value: Value, ty: &ir::Ty, addr: Value) -> io::Result<()> {
         match ty {
-            Ty::Bool => {
+            ir::Ty::Bool => {
                 writeln!(self.output, "  storeb {}, {}", value, addr)?;
             }
-            Ty::Int(ty) => {
+            ir::Ty::Int(ty) => {
                 let op = match ty.size {
                     Size::B8 => "storeb",
                     Size::B16 => "storeh",
@@ -339,23 +351,23 @@ impl<'a, W: Write> Compiler<'a, W> {
                 };
                 writeln!(self.output, "  {} {}, {}", op, value, addr)?;
             }
-            Ty::Ptr => {
+            ir::Ty::Ptr => {
                 writeln!(self.output, "  storel {}, {}", value, addr)?;
             }
-            Ty::Struct(tys) => {
+            ir::Ty::Struct(tys) => {
                 self.copy_struct(value, addr, tys)?;
             }
         }
         Ok(())
     }
-    fn load(&mut self, ty: &Ty, addr: Value) -> io::Result<Value> {
+    fn load(&mut self, ty: &ir::Ty, addr: Value) -> io::Result<Value> {
         Ok(match &ty {
-            Ty::Bool => {
+            ir::Ty::Bool => {
                 let temp = self.new_temp();
                 writeln!(self.output, "  {} =w loadb {}", temp, addr)?;
                 Value::Temp(temp)
             }
-            Ty::Int(int) => {
+            ir::Ty::Int(int) => {
                 let temp = self.new_temp();
                 let op = match (int.signedness, int.size) {
                     (Signedness::Signed, Size::B8) => "loadsb",
@@ -368,12 +380,12 @@ impl<'a, W: Write> Compiler<'a, W> {
                 writeln!(self.output, "  {} =w {} {}", temp, op, addr)?;
                 Value::Temp(temp)
             }
-            Ty::Ptr => {
+            ir::Ty::Ptr => {
                 let temp = self.new_temp();
                 writeln!(self.output, "  {} =l loadl {}", temp, addr)?;
                 Value::Temp(temp)
             }
-            Ty::Struct(_) => {
+            ir::Ty::Struct(_) => {
                 // let temp = self.alloc_ty(ty)?;
                 // self.copy_struct(addr, temp, s)?;
                 addr
