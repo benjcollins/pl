@@ -66,6 +66,11 @@ fn lower_expr(expr: &typed_ast::Expr) -> ir::Expr {
             }).collect();
             ir::Expr::InitStruct(values)
         }
+        typed_ast::Expr::Field { expr, name, ty } => {
+            let expr = Box::new(lower_expr(expr));
+            let fields = ty.concrete();
+            ir::Expr::Field { expr, fields, name: *name }
+        }
     }
 }
 

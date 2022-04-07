@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{infer::{InferTyRef, Unify, unify}, symbols::Symbol, ir};
+use crate::{infer::{InferTyRef, Unify, unify}, symbols::Symbol, ir::{self, StructField}};
 
 pub type TyRef = InferTyRef<Ty>;
 pub type IntTyRef = InferTyRef<IntTy>;
@@ -100,7 +100,7 @@ impl Unify for IntTy {
 }
 
 impl Unify for StructTy {
-    type Concrete = Vec<ir::Ty>;
+    type Concrete = Vec<ir::StructField>;
     
     fn unify(a: Self, b: Self) -> Result<Self, ()> {
         Ok(match (a, b) {
@@ -131,7 +131,7 @@ impl Unify for StructTy {
     fn concrete(&self) -> Self::Concrete {
         match self {
             StructTy::Known { fields, .. } => {
-                fields.iter().map(|field| field.ty.concrete()).collect()
+                fields.iter().map(|field| StructField { name: field.name, ty: field.ty.concrete() }).collect()
             }
             StructTy::WithFields(_) => panic!(),
         }

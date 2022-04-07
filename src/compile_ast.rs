@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use crate::{ast, typed_ast, ty::{TyRef, Ty, IntTyRef, IntTy, Signedness, Size, Int, StructTy, StructTyRef, Field}, infer::unify, symbols::Symbol};
 
@@ -284,7 +284,16 @@ impl<'a> Compiler<'a> {
                 let ty = TyRef::new(compile_struct(*name, self.program));
                 (typed_ast::Expr::InitStruct(mir_values), ty)
             }
-            ast::Expr::Field { .. } => todo!(),
+            ast::Expr::Field { expr, name } => {
+                let (expr, expr_ty) = self.compile_expr(expr);
+                let field_ty = TyRef::new(Ty::Any);
+                let mut with_fields = HashMap::new();
+                with_fields.insert(*name, field_ty.clone());
+                let struct_ty = StructTyRef::new(StructTy::WithFields(with_fields));
+                let ty = TyRef::new(Ty::Struct(struct_ty.clone()));
+                unify(&ty, &expr_ty).unwrap();
+                (typed_ast::Expr::Field { expr: Box::new(expr), name: *name, ty: struct_ty }, field_ty)
+            }
         }
     }
     fn compile_fn_call(&mut self, fn_call: &ast::FuncCall) -> (Vec<typed_ast::Expr>, Option<TyRef>) {

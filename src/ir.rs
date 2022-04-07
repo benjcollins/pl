@@ -5,7 +5,13 @@ pub enum Ty {
     Int(Int),
     Bool,
     Ptr,
-    Struct(Vec<Ty>),
+    Struct(Vec<StructField>),
+}
+
+#[derive(Debug, Clone)]
+pub struct StructField {
+    pub name: Symbol,
+    pub ty: Ty,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +75,11 @@ pub enum Expr {
     },
     FuncCall(FuncCall),
     InitStruct(Vec<StructValue>),
+    Field {
+        expr: Box<Expr>,
+        fields: Vec<StructField>,
+        name: Symbol,
+    }
 }
 
 #[derive(Debug, Clone)]

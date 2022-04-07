@@ -25,14 +25,7 @@ func sum(s: *i32, n: i32) {
 func main() {
     var p = point(9, 7);
     print_point(&p);
-
-    var i = 0;
-    var s = 0;
-    while i < 20 {
-        var f = fib(i);
-        print_int(f);
-        sum(&s, f);
-        i = i + 1;
-    }
-    print_int(s);
+    print_int(p.x);
+    print_int(p.y);
+    print_int(p.x + p.y);
 }

@@ -1,4 +1,4 @@
-use crate::{ty::{TyRef, IntTyRef}, symbols::Symbol};
+use crate::{ty::{TyRef, IntTyRef, StructTyRef}, symbols::Symbol};
 
 #[derive(Debug, Clone)]
 pub struct Func {
@@ -73,6 +73,11 @@ pub enum Expr {
     },
     FuncCall(FuncCall),
     InitStruct(Vec<StructValue>),
+    Field {
+        expr: Box<Expr>,
+        ty: StructTyRef,
+        name: Symbol,
+    }
 }
 
 #[derive(Debug, Clone)]

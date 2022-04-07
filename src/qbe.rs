@@ -32,8 +32,8 @@ fn size_bytes(ty: &ir::Ty) -> u32 {
         ir::Ty::Ptr => 8,
         ir::Ty::Struct(fields) => {
             let mut size = 0;
-            for ty in fields {
-                size = align_to(size, align_bytes(ty)) + size_bytes(ty);
+            for field in fields {
+                size = align_to(size, align_bytes(&field.ty)) + size_bytes(&field.ty);
             }
             size
         }
@@ -55,8 +55,8 @@ fn align_bytes(ty: &ir::Ty) -> u32 {
         ir::Ty::Ptr => 8,
         ir::Ty::Struct(fields) => {
             let mut max = 0;
-            for ty in fields {
-                let align =  align_bytes(ty);
+            for field in fields {
+                let align =  align_bytes(&field.ty);
                 if align > max {
                     max = align
                 }
@@ -216,19 +216,6 @@ impl<'a, W: Write> Compiler<'a, W> {
         };
         Ok(())
     }
-    // fn compile_deref_assign(&mut self, assign: &DerefAssign) -> io::Result<Temp> {
-    //     Ok(match assign {
-    //         Assign::Deref(assign) => {
-    //             let addr = self.compile_deref_assign(assign)?;
-    //             let temp = self.new_temp();
-    //             writeln!(self.output, "  {} =l loadl {}", temp, addr)?;
-    //             temp
-    //         }
-    //         ir::Assign::Variable(var) => {
-    //             self.stack_slots[var.0 as usize]
-    //         }
-    //     })
-    // }
     fn compile_expr(&mut self, expr: &ir::Expr) -> io::Result<Value> {
         Ok(match expr {
             ir::Expr::Int(value) => Value::Const(*value),
@@ -290,6 +277,21 @@ impl<'a, W: Write> Compiler<'a, W> {
                 }
                 Value::Temp(temp)
             }
+            ir::Expr::Field { expr, fields, name } => {
+                let struct_addr = self.compile_expr(expr)?;
+                let mut offset = 0;
+                for field in fields {
+                    offset = align_to(offset, align_bytes(&field.ty));
+                    if field.name == *name {
+                        let field_addr = self.new_temp();
+                        writeln!(self.output, "  {} =l add {}, {}", field_addr, struct_addr, offset)?;
+                        let field = self.load(&field.ty, Value::Temp(field_addr))?;
+                        return Ok(field);
+                    }
+                    offset += size_bytes(&field.ty);
+                }
+                panic!()
+            }
         })
     }
     fn compile_ref_expr(&self, ref_expr: &ir::RefExpr) -> Value {
@@ -321,20 +323,20 @@ impl<'a, W: Write> Compiler<'a, W> {
         writeln!(self.output, ")")?;
         Ok(temp)
     }
-    fn copy_struct(&mut self, src: Value, dest: Value, tys: &[ir::Ty]) -> io::Result<()> {
+    fn copy_struct(&mut self, src: Value, dest: Value, fields: &[ir::StructField]) -> io::Result<()> {
         let mut offset = 0;
-        for ty in tys {
-            offset = align_to(offset, align_bytes(ty));
+        for field in fields {
+            offset = align_to(offset, align_bytes(&field.ty));
 
             let src_off = self.new_temp();
             writeln!(self.output, "  {} =l add {}, {}", src_off, src, offset)?;
-            let value = self.load(ty, Value::Temp(src_off))?;
+            let value = self.load(&field.ty, Value::Temp(src_off))?;
             
             let dest_off = self.new_temp();
             writeln!(self.output, "  {} =l add {}, {}", dest_off, dest, offset)?;
             
-            self.store(value, ty, Value::Temp(dest_off))?;
-            offset += size_bytes(ty);
+            self.store(value, &field.ty, Value::Temp(dest_off))?;
+            offset += size_bytes(&field.ty);
         }
         Ok(())
     }
@@ -354,8 +356,8 @@ impl<'a, W: Write> Compiler<'a, W> {
             ir::Ty::Ptr => {
                 writeln!(self.output, "  storel {}, {}", value, addr)?;
             }
-            ir::Ty::Struct(tys) => {
-                self.copy_struct(value, addr, tys)?;
+            ir::Ty::Struct(fields) => {
+                self.copy_struct(value, addr, fields)?;
             }
         }
         Ok(())
