@@ -182,21 +182,8 @@ impl<'a> Compiler<'a> {
                 let var = self.lookup_var(*name);
                 (typed_ast::RefExpr::Variable(var.var), var.ty.clone())
             }
-            ast::RefExpr::Field { .. } => todo!(),
         }
     }
-    // fn compile_deref_assign(&mut self, assign: &ast::DerefAssign) -> (typed_ast::DerefAssign, TyRef) {
-    //     match assign {
-    //         ast::DerefAssign::Deref(assign) => {
-    //             let (assign, ty) = self.compile_deref_assign(assign);
-    //             (typed_ast::DerefAssign::Deref(Box::new(assign)), deref_ty(&ty))
-    //         }
-    //         ast::DerefAssign::Ident(name) => {
-    //             let var = self.lookup_var(*name);
-    //             (typed_ast::DerefAssign::Variable(var.var), var.ty.clone())
-    //         }
-    //     }
-    // }
     fn compile_if(&mut self, if_stmt: &ast::If, block_id: &mut typed_ast::BlockId) {
         let mut if_block = self.new_block();
         let mut else_block = self.new_block();
