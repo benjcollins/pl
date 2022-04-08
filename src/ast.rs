@@ -1,47 +1,68 @@
-#[derive(Debug, Clone, PartialEq)]
-pub struct If<'a> {
-    pub cond: Box<Expr<'a>>,
-    pub if_block: Block<'a>,
-    pub else_block: Else<'a>,
+use std::collections::HashMap;
+
+use crate::symbols::Symbol;
+
+#[derive(Debug, Clone)]
+pub struct If {
+    pub cond: Box<Expr>,
+    pub if_block: Block,
+    pub else_block: Else,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Else<'a> {
-    Block(Block<'a>),
-    If(Box<If<'a>>),
+#[derive(Debug, Clone)]
+pub enum Else {
+    Block(Block),
+    If(Box<If>),
     None,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Expr<'a> {
-    Integer(&'a str),
+#[derive(Debug, Clone)]
+pub enum Expr {
+    Integer(i64),
     Bool(bool),
-    Ident(&'a str),
+    Ident(Symbol),
+    Field {
+        expr: Box<Expr>,
+        name: Symbol,
+    },
     Infix {
-        left: Box<Expr<'a>>,
-        right: Box<Expr<'a>>,
+        left: Box<Expr>,
+        right: Box<Expr>,
         op: InfixOp,
     },
+    Ref(Box<RefExpr>),
     Prefix {
         op: PrefixOp,
-        expr: Box<Expr<'a>>,
+        expr: Box<Expr>,
     },
-    FnCall(FnCall<'a>),
+    FuncCall(FuncCall),
+    InitStruct {
+        name: Symbol,
+        values: Vec<StructValue>
+    },
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Assign<'a> {
-    Deref(Box<Assign<'a>>),
-    Name(&'a str),
+#[derive(Debug, Clone)]
+pub enum RefExpr {
+    Ident(Symbol),
+    Field {
+        ref_expr: Box<RefExpr>,
+        name: Symbol,
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone)]
+pub struct StructValue {
+    pub name: Symbol,
+    pub expr: Expr,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum PrefixOp {
     Deref,
-    Ref,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub enum InfixOp {
     Add,
     Subtract,
@@ -51,54 +72,82 @@ pub enum InfixOp {
     GreaterThan,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Stmt<'a> {
+#[derive(Debug, Clone)]
+pub enum Stmt {
     Let {
-        ident: &'a str,
-        expr: Option<Expr<'a>>,
-        ty: Option<Ty<'a>>
+        ident: Symbol,
+        expr: Option<Expr>,
+        ty: Option<Ty>
     },
     Assign {
-        assign: Assign<'a>,
-        expr: Expr<'a>
+        ref_expr: RefExpr,
+        expr: Expr,
+    },
+    DerefAssign {
+        assign: Expr,
+        expr: Expr
     },
     While {
-        cond: Expr<'a>,
-        body: Block<'a>,
+        cond: Expr,
+        body: Block,
     },
-    Return(Option<Expr<'a>>),
-    If(If<'a>),
-    FnCall(FnCall<'a>),
+    Return(Option<Expr>),
+    If(If),
+    FuncCall(FuncCall),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Ty<'a> {
-    Name(&'a str),
-    Ref(Box<Ty<'a>>),
+#[derive(Debug, Clone)]
+pub enum Ty {
+    Struct(Symbol),
+    Ref(Box<Ty>),
+    Int(Int),
+    Bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Block<'a> {
-    pub stmts: Vec<Stmt<'a>>,
+#[derive(Debug, Clone)]
+pub enum Int {
+    I8,
+    I16,
+    I32,
+    U8,
+    U16,
+    U32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Param<'a> {
-    pub name: &'a str,
-    pub ty: Ty<'a>,
+#[derive(Debug, Clone)]
+pub struct Block {
+    pub stmts: Vec<Stmt>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct FnCall<'a> {
-    pub name: &'a str,
-    pub args: Vec<Expr<'a>>,
+#[derive(Debug, Clone)]
+pub struct Param {
+    pub name: Symbol,
+    pub ty: Ty,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Func<'a> {
-    pub params: Vec<Param<'a>>,
-    pub returns: Option<Ty<'a>>,
-    pub body: Option<Block<'a>>,
-    pub name: &'a str,
-    pub is_extern: bool,
+#[derive(Debug, Clone)]
+pub struct FuncCall {
+    pub name: Symbol,
+    pub args: Vec<Expr>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Func {
+    pub params: Vec<Param>,
+    pub returns: Option<Ty>,
+    pub body: Option<Block>,
+}
+
+pub struct Struct {
+    pub fields: Vec<StructField>,
+}
+
+pub struct StructField {
+    pub name: Symbol,
+    pub ty: Ty,
+}
+
+pub struct Program {
+    pub funcs: HashMap<Symbol, Func>,
+    pub structs: HashMap<Symbol, Struct>,
 }

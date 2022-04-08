@@ -31,11 +31,20 @@ pub fn lex<'a>(src: &'a str) -> Vec<Token> {
                     "if" => TokenKind::If,
                     "else" => TokenKind::Else,
                     "while" => TokenKind::While,
-                    "extern" => TokenKind::Extern,
                     "struct" => TokenKind::Struct,
+                    "i8" => TokenKind::I8,
+                    "i16" => TokenKind::I16,
+                    "i32" => TokenKind::I32,
+                    "u8" => TokenKind::U8,
+                    "u16" => TokenKind::U16,
+                    "u32" => TokenKind::U32,
+                    "bool" => TokenKind::Bool,
                     _ => TokenKind::Ident,
                 };
                 lexer.push_token(offset, kind);
+            }
+            '#' => {
+                lexer.next_while(|ch| ch != '\n');
             }
             '(' => lexer.single_char_token(TokenKind::OpenBrace),
             ')' => lexer.single_char_token(TokenKind::CloseBrace),
@@ -52,6 +61,7 @@ pub fn lex<'a>(src: &'a str) -> Vec<Token> {
             ':' => lexer.single_char_token(TokenKind::Colon),
             ';' => lexer.single_char_token(TokenKind::Semicolon),
             '&' => lexer.single_char_token(TokenKind::Ampersand),
+            '.' => lexer.single_char_token(TokenKind::Dot),
             _ => panic!(),
         }
     }

@@ -16,12 +16,20 @@ pub enum TokenKind {
     ForwardSlash,
     OpenAngleBrace,
     CloseAngleBrace,
-
     Equals,
     Comma,
     Colon,
     Semicolon,
     Ampersand,
+    Dot,
+
+    I8,
+    I16,
+    I32,
+    U8,
+    U16,
+    U32,
+    Bool,
 
     Var,
     Func,
@@ -31,7 +39,6 @@ pub enum TokenKind {
     While,
     True,
     False,
-    Extern,
     Struct,
 
     OpenBrace,

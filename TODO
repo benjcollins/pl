@@ -1,5 +1,4 @@
 * Structures
-* Generics
 * Pointer Provenance
-* Parsing C Header files
-* Improve parsing
+* Slices
+* Generics
