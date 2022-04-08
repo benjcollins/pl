@@ -296,12 +296,12 @@ impl<'a> Compiler<'a> {
             }
         }
     }
-    fn compile_fn_call(&mut self, fn_call: &ast::FuncCall) -> (Vec<typed_ast::Expr>, Option<TyRef>) {
-        let func = self.program.funcs.get(&fn_call.name).unwrap();
-        if fn_call.args.len() != func.params.len() {
+    fn compile_fn_call(&mut self, func_call: &ast::FuncCall) -> (Vec<typed_ast::Expr>, Option<TyRef>) {
+        let func = self.program.funcs.get(&func_call.name).unwrap();
+        if func_call.args.len() != func.params.len() {
             panic!()
         }
-        let args = fn_call.args.iter().zip(&func.params).map(|(arg, param)| {
+        let args = func_call.args.iter().zip(&func.params).map(|(arg, param)| {
             let (expr, ty) = self.compile_expr(arg);
             let param_ty = compile_ty(&param.ty, self.program);
             unify(&ty, &param_ty).unwrap();

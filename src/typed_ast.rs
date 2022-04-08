@@ -7,7 +7,6 @@ pub struct Func {
     pub blocks: Vec<Block>,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Variable(pub u32);
 
