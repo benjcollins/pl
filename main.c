@@ -2,8 +2,6 @@
 
 void print_int(int n) {
     printf("%d\n", n);
-<<<<<<< HEAD
-=======
 }
 
 struct Point {
@@ -13,5 +11,4 @@ struct Point {
 
 void print_point(struct Point *p) {
     printf("(%d, %d)\n", p->x, p->y);
->>>>>>> structs
 }
