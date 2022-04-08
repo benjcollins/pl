@@ -49,6 +49,11 @@ pub enum Stmt {
 #[derive(Debug, Clone)]
 pub enum RefExpr {
     Variable(Variable),
+    Field {
+        ref_expr: Box<RefExpr>,
+        name: Symbol,
+        ty: StructTyRef,
+    }
 }
 
 #[derive(Debug, Clone)]

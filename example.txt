@@ -24,6 +24,11 @@ func sum(s: *i32, n: i32) {
 
 func main() {
     var p = point(9, 7);
+
+    var r = &p.x;
+
+    *r = fib(11);
+
     print_point(&p);
     print_int(p.x);
     print_int(p.y);

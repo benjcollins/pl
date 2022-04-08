@@ -39,6 +39,11 @@ fn lower_stmt(stmt: &typed_ast::Stmt) -> ir::Stmt {
 fn lower_ref_expr(ref_expr: &typed_ast::RefExpr) -> ir::RefExpr {
     match ref_expr {
         typed_ast::RefExpr::Variable(var) => ir::RefExpr::Variable(*var),
+        typed_ast::RefExpr::Field { ref_expr, name, ty } => {
+            let ref_expr = Box::new(lower_ref_expr(ref_expr));
+            let fields = ty.concrete();
+            ir::RefExpr::Field { ref_expr, fields, name: *name }
+        }
     }
 }
 

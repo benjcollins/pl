@@ -71,13 +71,27 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(items)
     }
     fn parse_ref_expr(&mut self) -> ParseResult<RefExpr> {
-        Ok(match self.peek() {
+        let value = match self.peek() {
             TokenKind::Ident => {
                 let ident = self.next().as_str(self.src);
                 RefExpr::Ident(self.symbols.get_symbol(ident))
             }
             _ => Err(self.unexpected_token())?
-        })
+        };
+        self.parse_ref_expr_fields(value)
+    }
+    fn parse_ref_expr_fields(&mut self, mut left: RefExpr) -> ParseResult<RefExpr> {
+        loop {
+            match self.peek() {
+                TokenKind::Dot => {
+                    self.next();
+                    let ident = self.eat_or_err(TokenKind::Ident)?.as_str(self.src);
+                    let name = self.symbols.get_symbol(ident);
+                    left = RefExpr::Field { ref_expr: Box::new(left), name };
+                }
+                _ => break Ok(left)
+            }
+        }
     }
     fn parse_expr(&mut self, prec: Prec) -> ParseResult<Expr> {
         let mut left = match self.peek() {
@@ -228,9 +242,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     let args = self.parse_list(TokenKind::Comma, TokenKind::CloseBrace, |parser| parser.parse_expr(Prec::Bracket))?;
                     Stmt::FuncCall(FuncCall { name: symbol, args })
                 } else {
+                    let ref_expr = self.parse_ref_expr_fields(RefExpr::Ident(symbol))?;
                     self.eat_or_err(TokenKind::Equals)?;
                     let expr = self.parse_expr(Prec::Bracket)?;
-                    Stmt::Assign { ref_expr: RefExpr::Ident(symbol), expr }
+                    Stmt::Assign { ref_expr, expr }
                 };
                 self.eat_or_err(TokenKind::Semicolon)?;
                 stmt

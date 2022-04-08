@@ -182,6 +182,16 @@ impl<'a> Compiler<'a> {
                 let var = self.lookup_var(*name);
                 (typed_ast::RefExpr::Variable(var.var), var.ty.clone())
             }
+            ast::RefExpr::Field { ref_expr, name } => {
+                let (ref_expr, ref_expr_ty) = self.compile_ref_expr(ref_expr);
+                let field_ty = TyRef::new(Ty::Any);
+                let mut with_fields = HashMap::new();
+                with_fields.insert(*name, field_ty.clone());
+                let struct_ty = StructTyRef::new(StructTy::WithFields(with_fields));
+                let ty = TyRef::new(Ty::Struct(struct_ty.clone()));
+                unify(&ty, &ref_expr_ty).unwrap();
+                (typed_ast::RefExpr::Field { ref_expr: Box::new(ref_expr), name: *name, ty: struct_ty }, field_ty)
+            }
         }
     }
     fn compile_if(&mut self, if_stmt: &ast::If, block_id: &mut typed_ast::BlockId) {

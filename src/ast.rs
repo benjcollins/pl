@@ -45,6 +45,10 @@ pub enum Expr {
 #[derive(Debug, Clone)]
 pub enum RefExpr {
     Ident(Symbol),
+    Field {
+        ref_expr: Box<RefExpr>,
+        name: Symbol,
+    }
 }
 
 #[derive(Debug, Clone)]

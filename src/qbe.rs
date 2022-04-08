@@ -198,9 +198,9 @@ impl<'a, W: Write> Compiler<'a, W> {
                 self.stack_slots.push(temp);
             }
             ir::Stmt::Assign { ref_expr, ty, expr } => {
-                let addr = self.compile_ref_expr(ref_expr);
+                let addr = self.compile_ref_expr(ref_expr)?;
                 let temp = self.compile_expr(expr)?;
-                self.store(temp, &ty, addr)?;
+                self.store(temp, &ty, Value::Temp(addr))?;
             }
             ir::Stmt::DerefAssign { assign, expr, ty } => {
                 let temp = self.compile_expr(expr)?;
@@ -249,11 +249,7 @@ impl<'a, W: Write> Compiler<'a, W> {
                 let temp = self.stack_slots[var.0 as usize];
                 self.load(&ty, Value::Temp(temp))?
             }
-            ir::Expr::Ref(ref_expr) => {
-                match ref_expr {
-                    ir::RefExpr::Variable(var) => Value::Temp(self.stack_slots[var.0 as usize]),
-                }
-            }
+            ir::Expr::Ref(ref_expr) => Value::Temp(self.compile_ref_expr(ref_expr)?),
             ir::Expr::Deref { expr, ty } => {
                 let temp = self.compile_expr(expr)?;
                 self.load(&ty, temp)?
@@ -279,24 +275,33 @@ impl<'a, W: Write> Compiler<'a, W> {
             }
             ir::Expr::Field { expr, fields, name } => {
                 let struct_addr = self.compile_expr(expr)?;
-                let mut offset = 0;
-                for field in fields {
-                    offset = align_to(offset, align_bytes(&field.ty));
-                    if field.name == *name {
-                        let field_addr = self.new_temp();
-                        writeln!(self.output, "  {} =l add {}, {}", field_addr, struct_addr, offset)?;
-                        let field = self.load(&field.ty, Value::Temp(field_addr))?;
-                        return Ok(field);
-                    }
-                    offset += size_bytes(&field.ty);
-                }
-                panic!()
+                let (field_addr, field_ty) = self.field_addr(struct_addr, fields, *name)?;
+                let field = self.load(field_ty, Value::Temp(field_addr))?;
+                field
             }
         })
     }
-    fn compile_ref_expr(&self, ref_expr: &ir::RefExpr) -> Value {
+    fn field_addr<'b>(&mut self, struct_addr: Value, fields: &'b [ir::StructField], name: Symbol) -> io::Result<(Temp, &'b ir::Ty)> {
+        let mut offset = 0;
+        for field in fields {
+            offset = align_to(offset, align_bytes(&field.ty));
+            if field.name == name {
+                let field_addr = self.new_temp();
+                writeln!(self.output, "  {} =l add {}, {}", field_addr, struct_addr, offset)?;
+                return Ok((field_addr, &field.ty));
+            }
+            offset += size_bytes(&field.ty);
+        }
+        panic!()
+    }
+    fn compile_ref_expr(&mut self, ref_expr: &ir::RefExpr) -> io::Result<Temp> {
         match ref_expr {
-            ir::RefExpr::Variable(var) => Value::Temp(self.stack_slots[var.0 as usize]),
+            ir::RefExpr::Variable(var) => Ok(self.stack_slots[var.0 as usize]),
+            ir::RefExpr::Field { ref_expr, fields, name } => {
+                let struct_addr = self.compile_ref_expr(ref_expr)?;
+                let (field_addr, _) = self.field_addr(Value::Temp(struct_addr), fields, *name)?;
+                Ok(field_addr)
+            }
         }
     }
     fn compile_func_call(&mut self, func_call: &ir::FuncCall) -> io::Result<Option<Temp>> {

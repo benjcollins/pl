@@ -85,6 +85,11 @@ pub enum Expr {
 #[derive(Debug, Clone)]
 pub enum RefExpr {
     Variable(typed_ast::Variable),
+    Field {
+        ref_expr: Box<RefExpr>,
+        fields: Vec<StructField>,
+        name: Symbol,
+    }
 }
 
 #[derive(Debug, Clone)]
