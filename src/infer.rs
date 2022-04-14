@@ -16,20 +16,17 @@ impl<T: Unify> Clone for InferTyRef<T> {
 }
 
 pub trait Unify where Self: Sized {
-    type Concrete;
-
     fn unify(a: Self, b: Self) -> Result<Self, ()>;
-    fn concrete(&self) -> Self::Concrete;
 }
 
-impl<T: Unify<Concrete = C>, C> InferTyRef<T> {
+impl<T: Unify> InferTyRef<T> {
     pub fn new(ty: T) -> InferTyRef<T> {
         InferTyRef(Rc::new(RefCell::new(InferTy::Known(Some(ty)))))
     }
-    pub fn concrete(&self) -> C {
+    pub fn map<T1>(&self, f: impl Fn(&T) -> T1) -> T1 {
         match &*self.0.borrow() {
-            InferTy::Equal(r) => r.concrete(),
-            InferTy::Known(ty) => ty.as_ref().unwrap().concrete(),
+            InferTy::Equal(r) => r.map(f),
+            InferTy::Known(ty) => f(ty.as_ref().unwrap()),
         }
     }
 }

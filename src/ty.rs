@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{infer::{InferTyRef, Unify, unify}, symbols::Symbol, ir::{self, StructField}};
+use crate::{infer::{InferTyRef, Unify, unify}, symbols::Symbol, ir};
 
 pub type TyRef = InferTyRef<Ty>;
 pub type IntTyRef = InferTyRef<IntTy>;
@@ -53,8 +53,6 @@ pub struct Field {
 }
 
 impl Unify for Ty {
-    type Concrete = ir::Ty;
-
     fn unify(a: Ty, b: Ty) -> Result<Ty, ()> {
         Ok(match (a, b) {
             (Ty::Any, Ty::Any) => Ty::Any,
@@ -66,20 +64,9 @@ impl Unify for Ty {
             _ => Err(())?,
         })
     }
-    fn concrete(&self) -> Self::Concrete {
-        match self {
-            Ty::Bool => ir::Ty::Bool,
-            Ty::Ref(_) => ir::Ty::Ptr,
-            Ty::Int(ty) => ir::Ty::Int(ty.concrete()),
-            Ty::Struct(ty) => ir::Ty::Struct(ty.concrete()),
-            Ty::Any => panic!(),
-        }
-    }
 }
 
 impl Unify for IntTy {
-    type Concrete = Int;
-
     fn unify(a: Self, b: Self) -> Result<Self, ()> {
         Ok(match (a, b) {
             (IntTy::Any, IntTy::Any) => IntTy::Any,
@@ -91,17 +78,9 @@ impl Unify for IntTy {
             } 
         })
     }
-    fn concrete(&self) -> Self::Concrete {
-        match self {
-            IntTy::Int(int) => *int,
-            IntTy::Any => Int { signedness: Signedness::Signed, size: Size::B32 },
-        }
-    }
 }
 
 impl Unify for StructTy {
-    type Concrete = Vec<ir::StructField>;
-    
     fn unify(a: Self, b: Self) -> Result<Self, ()> {
         Ok(match (a, b) {
             (StructTy::Known { name: a, fields }, StructTy::Known { name: b, .. }) => if a == b {
@@ -127,14 +106,6 @@ impl Unify for StructTy {
                 StructTy::WithFields(a)
             }
         })
-    }
-    fn concrete(&self) -> Self::Concrete {
-        match self {
-            StructTy::Known { fields, .. } => {
-                fields.iter().map(|field| StructField { name: field.name, ty: field.ty.concrete() }).collect()
-            }
-            StructTy::WithFields(_) => panic!(),
-        }
     }
 }
 
