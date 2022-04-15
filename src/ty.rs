@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{infer::{InferTyRef, Unify, unify}, symbols::Symbol, ir};
+use crate::{infer::{InferTyRef, Unify, unify}, symbols::Symbol};
 
 pub type TyRef = InferTyRef<Ty>;
 pub type IntTyRef = InferTyRef<IntTy>;
@@ -54,15 +54,15 @@ pub struct Field {
 
 impl Unify for Ty {
     fn unify(a: Ty, b: Ty) -> Result<Ty, ()> {
-        Ok(match (a, b) {
-            (Ty::Any, Ty::Any) => Ty::Any,
-            (Ty::Any, ty) | (ty,  Ty::Any) => ty,
-            (Ty::Bool, Ty::Bool) => Ty::Bool,
-            (Ty::Ref(a), Ty::Ref(b)) => Ty::Ref(unify(&a, &b)?),
-            (Ty::Int(a), Ty::Int(b)) => Ty::Int(unify(&a, &b)?),
-            (Ty::Struct(a), Ty::Struct(b)) => Ty::Struct(unify(&a, &b)?),
+        match (a, b) {
+            (Ty::Any, Ty::Any) => Ok(Ty::Any),
+            (Ty::Any, ty) | (ty,  Ty::Any) => Ok(ty),
+            (Ty::Bool, Ty::Bool) => Ok(Ty::Bool),
+            (Ty::Ref(a), Ty::Ref(b)) => Ok(Ty::Ref(unify(&a, &b)?)),
+            (Ty::Int(a), Ty::Int(b)) => Ok(Ty::Int(unify(&a, &b)?)),
+            (Ty::Struct(a), Ty::Struct(b)) => Ok(Ty::Struct(unify(&a, &b)?)),
             _ => Err(())?,
-        })
+        }
     }
 }
 

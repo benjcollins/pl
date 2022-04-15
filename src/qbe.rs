@@ -1,6 +1,6 @@
 use std::{io::{Write, self}, fmt};
 
-use crate::{ty::{Size, Signedness}, ast, symbols::{Symbols, Symbol}, ir, typed_ast::BinaryOp};
+use crate::{ty::{Size, Signedness}, ast, symbols::{Symbols, Symbol}, ir, typed_ast};
 
 struct Compiler<'a, W: Write> {
     stack_slots: Vec<Temp>,
@@ -225,18 +225,18 @@ impl<'a, W: Write> Compiler<'a, W> {
                 let left_temp = self.compile_expr(left)?;
                 let right_temp = self.compile_expr(right)?;
                 let op = match bin_op {
-                    BinaryOp::Add => "add",
-                    BinaryOp::Subtract => "sub",
-                    BinaryOp::Multiply => "mul",
-                    BinaryOp::Divide => match ty.signedness {
+                    typed_ast::BinaryOp::Add => "add",
+                    typed_ast::BinaryOp::Subtract => "sub",
+                    typed_ast::BinaryOp::Multiply => "mul",
+                    typed_ast::BinaryOp::Divide => match ty.signedness {
                         Signedness::Signed => "div",
                         Signedness::Unsigned => "udiv",
                     }
-                    BinaryOp::LessThan => match ty.signedness {
+                    typed_ast::BinaryOp::LessThan => match ty.signedness {
                         Signedness::Signed => "csltw",
                         Signedness::Unsigned => "cultw",
                     }
-                    BinaryOp::GreaterThan => match ty.signedness {
+                    typed_ast::BinaryOp::GreaterThan => match ty.signedness {
                         Signedness::Signed => "csgtw",
                         Signedness::Unsigned => "cugtw",
                     }
@@ -392,11 +392,7 @@ impl<'a, W: Write> Compiler<'a, W> {
                 writeln!(self.output, "  {} =l loadl {}", temp, addr)?;
                 Value::Temp(temp)
             }
-            ir::Ty::Struct(_) => {
-                // let temp = self.alloc_ty(ty)?;
-                // self.copy_struct(addr, temp, s)?;
-                addr
-            }
+            ir::Ty::Struct(_) => addr,
         })
     }
     fn new_temp(&mut self) -> Temp {
