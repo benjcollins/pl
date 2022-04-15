@@ -1,4 +1,4 @@
-use std::{io::{Write, self}, fmt};
+use std::{io::{Write, self}, fmt, iter::repeat_with};
 
 use crate::{ty::{Size, Signedness}, ast, symbols::{Symbols, Symbol}, ir, typed_ast};
 
@@ -123,7 +123,7 @@ pub fn compile_fun<'a, W: Write>(func: &ir::Func, output: W, symbols: &'a Symbol
         write!(compiler.output, "{} ", TyName::new(ty, symbols))?;
     }
     write!(compiler.output, "${}(", symbols.get_str(func.name))?;
-    let param_temps: Vec<_> = (0..func_ast.params.len()).map(|_| compiler.new_temp()).collect();
+    let param_temps: Vec<_> = repeat_with(|| compiler.new_temp()).take(func_ast.params.len()).collect();
     let mut param_iter = param_temps.iter().zip(&func_ast.params);
     if let Some((temp, param)) = param_iter.next() {
         write!(compiler.output, "{} {}", TyName::new(&param.ty, symbols), temp)?;
