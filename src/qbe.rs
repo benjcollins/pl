@@ -46,13 +46,7 @@ fn align_to(offset: u32, align: u32) -> u32 {
 
 fn align_bytes(ty: &ir::Ty) -> u32 {
     match ty {
-        ir::Ty::Bool => 1,
-        ir::Ty::Int(int_ty) => match int_ty.size {
-            Size::B8 => 1,
-            Size::B16 => 2,
-            Size::B32 => 4,
-        }
-        ir::Ty::Ptr => 8,
+        ir::Ty::Int(_) | ir::Ty::Bool | ir::Ty::Ptr => size_bytes(ty),
         ir::Ty::Struct(fields) => {
             let mut max = 0;
             for field in fields {

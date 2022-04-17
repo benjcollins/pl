@@ -133,7 +133,6 @@ impl<'a> Compiler<'a> {
                     unify(&ty, &expr_ty).unwrap();
                     self.push_stmt(*block_id, typed_ast::Stmt::Assign {
                         ref_expr: typed_ast::RefExpr::Variable(var),
-                        ty,
                         expr,
                     });
                 }
@@ -142,13 +141,13 @@ impl<'a> Compiler<'a> {
                 let (ref_expr, ref_ty) = self.compile_ref_expr(ref_expr);
                 let (expr, ty) = self.compile_expr(expr);
                 unify(&ref_ty, &ty).unwrap();
-                self.push_stmt(*block_id, typed_ast::Stmt::Assign { ref_expr, expr, ty })
+                self.push_stmt(*block_id, typed_ast::Stmt::Assign { ref_expr, expr })
             }
             ast::Stmt::DerefAssign { assign, expr } => {
                 let (expr, expr_ty) = self.compile_expr(expr);
                 let (assign, ty) = self.compile_expr(assign);
                 unify(&expr_ty, &deref_ty(&ty)).unwrap();
-                self.push_stmt(*block_id, typed_ast::Stmt::DerefAssign { assign, expr, ty: expr_ty });
+                self.push_stmt(*block_id, typed_ast::Stmt::DerefAssign { assign, expr });
             }
             ast::Stmt::Return(expr) => {
                 let expr = expr.as_ref().map(|expr| self.compile_expr(expr));
@@ -232,7 +231,7 @@ impl<'a> Compiler<'a> {
         match expr {
             ast::Expr::Integer(value) => {
                 let int_ty = IntTyRef::new(IntTy::Any);
-                (typed_ast::Expr::Int(*value), TyRef::new(Ty::Int(int_ty)))
+                (typed_ast::Expr::Int { value: *value, ty: int_ty.clone() }, TyRef::new(Ty::Int(int_ty)))
             }
             ast::Expr::Bool(value) =>  {
                 (typed_ast::Expr::Bool(*value), TyRef::new(Ty::Bool))
@@ -250,10 +249,7 @@ impl<'a> Compiler<'a> {
             }
             ast::Expr::Ident(ident) => {
                 let var = self.lookup_var(*ident);
-                (typed_ast::Expr::Load {
-                    var: var.var,
-                    ty: var.ty.clone(),
-                }, var.ty.clone())
+                (typed_ast::Expr::Load(var.var), var.ty.clone())
             }
             ast::Expr::Ref(ref_expr) => {
                 let (ref_expr, ty) = self.compile_ref_expr(ref_expr);
@@ -289,7 +285,7 @@ impl<'a> Compiler<'a> {
                     let field_ty = compile_ty(&field.ty, self.program);
                     unify(&ty, &field_ty).unwrap();
                     tys.push(field_ty);
-                    mir_values.push(typed_ast::StructValue { ty, expr });
+                    mir_values.push(expr);
                 }
                 let ty = TyRef::new(compile_struct(*name, self.program));
                 (typed_ast::Expr::InitStruct(mir_values), ty)

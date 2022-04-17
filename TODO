@@ -1,3 +1,11 @@
 * Pointer Provenance
 * Slices
 * Generics
+
+* Compile time type query
+* Auto deref
+* Methods
+* Module system
+* Machine Code Backend
+* Variable Args
+* Closure

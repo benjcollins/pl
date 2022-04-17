@@ -30,7 +30,7 @@ fn main() {
         qbe::compile_struct(*name, structure, &file, &symbols).unwrap();
     }
     for func_mir in &func_mirs {
-        let func_lir = compile_typed_ast::lower_func(func_mir);
+        let func_lir = compile_typed_ast::compile_func(func_mir);
         qbe::compile_fun(&func_lir, &file, &symbols, &program).unwrap();
     }
     Command::new("qbe/obj/qbe").args(["output.ssa", "-o", "output.S"]).status().unwrap();

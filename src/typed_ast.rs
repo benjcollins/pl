@@ -36,12 +36,10 @@ pub enum Stmt {
     DerefAssign {
         assign: Expr,
         expr: Expr,
-        ty: TyRef,
     },
     Assign {
         ref_expr: RefExpr,
         expr: Expr,
-        ty: TyRef,
     },
     FuncCall(FuncCall),
 }
@@ -58,7 +56,10 @@ pub enum RefExpr {
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Int(i64),
+    Int {
+        value: i64,
+        ty: IntTyRef,
+    },
     Binary {
         left: Box<Expr>,
         right: Box<Expr>,
@@ -66,28 +67,19 @@ pub enum Expr {
         op: BinaryOp,
     },
     Bool(bool),
-    Load {
-        var: Variable,
-        ty: TyRef,
-    },
+    Load(Variable),
     Ref(RefExpr),
     Deref {
         expr: Box<Expr>,
         ty: TyRef,
     },
     FuncCall(FuncCall),
-    InitStruct(Vec<StructValue>),
+    InitStruct(Vec<Expr>),
     Field {
         expr: Box<Expr>,
         ty: StructTyRef,
         name: Symbol,
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct StructValue {
-    pub expr: Expr,
-    pub ty: TyRef,
 }
 
 #[derive(Debug, Clone)]

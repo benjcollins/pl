@@ -1,11 +1,20 @@
+use std::rc::Rc;
+
 use crate::{ty::Int, typed_ast, symbols::Symbol};
 
 #[derive(Debug, Clone)]
 pub enum Ty {
     Int(Int),
     Bool,
-    Ptr,
+    Ptr(Region),
     Struct(Vec<StructField>),
+}
+
+#[derive(Debug, Clone)]
+pub enum Region {
+    Either(Rc<Region>, Rc<Region>),
+    SubRegion(Rc<Region>),
+    Region(bool),
 }
 
 #[derive(Debug, Clone)]
