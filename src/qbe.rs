@@ -200,11 +200,6 @@ impl<'a, W: Write> Compiler<'a, W> {
             ir::Stmt::Assign { ref_expr, ty, expr } => {
                 let addr = self.compile_ref_expr(ref_expr)?;
                 let temp = self.compile_expr(expr)?;
-                self.store(temp, &ty, Value::Temp(addr))?;
-            }
-            ir::Stmt::DerefAssign { assign, expr, ty } => {
-                let temp = self.compile_expr(expr)?;
-                let addr = self.compile_expr(assign)?;
                 self.store(temp, &ty, addr)?;
             }
             ir::Stmt::FuncCall(func_call) => {
@@ -249,7 +244,7 @@ impl<'a, W: Write> Compiler<'a, W> {
                 let temp = self.stack_slots[var.0 as usize];
                 self.load(&ty, Value::Temp(temp))?
             }
-            ir::Expr::Ref(ref_expr) => Value::Temp(self.compile_ref_expr(ref_expr)?),
+            ir::Expr::Ref(ref_expr) => self.compile_ref_expr(ref_expr)?,
             ir::Expr::Deref { expr, ty } => {
                 let temp = self.compile_expr(expr)?;
                 self.load(&ty, temp)?
@@ -294,13 +289,14 @@ impl<'a, W: Write> Compiler<'a, W> {
         }
         panic!()
     }
-    fn compile_ref_expr(&mut self, ref_expr: &ir::RefExpr) -> io::Result<Temp> {
+    fn compile_ref_expr(&mut self, ref_expr: &ir::RefExpr) -> io::Result<Value> {
         match ref_expr {
-            ir::RefExpr::Variable(var) => Ok(self.stack_slots[var.0 as usize]),
+            ir::RefExpr::Variable(var) => Ok(Value::Temp(self.stack_slots[var.0 as usize])),
+            ir::RefExpr::Deref(expr) => self.compile_expr(expr),
             ir::RefExpr::Field { ref_expr, fields, name } => {
                 let struct_addr = self.compile_ref_expr(ref_expr)?;
-                let (field_addr, _) = self.field_addr(Value::Temp(struct_addr), fields, *name)?;
-                Ok(field_addr)
+                let (field_addr, _) = self.field_addr(struct_addr, fields, *name)?;
+                Ok(Value::Temp(field_addr))
             }
         }
     }

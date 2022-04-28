@@ -72,6 +72,17 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
     fn parse_ref_expr(&mut self) -> ParseResult<RefExpr> {
         let value = match self.peek() {
+            TokenKind::Asterisk => {
+                self.next();
+                let expr = self.parse_expr(Prec::Bracket)?;
+                RefExpr::Deref(expr)
+            }
+            TokenKind::OpenBrace => {
+                self.next();
+                let ref_expr = self.parse_ref_expr()?;
+                self.eat_or_err(TokenKind::CloseBrace)?;
+                ref_expr
+            }
             TokenKind::Ident => {
                 let ident = self.next().as_str(self.src);
                 RefExpr::Ident(self.symbols.get_symbol(ident))
@@ -251,12 +262,11 @@ impl<'a, 'b> Parser<'a, 'b> {
                 stmt
             }
             TokenKind::Asterisk => {
-                self.next();
-                let assign = self.parse_expr(Prec::Bracket)?;
+                let ref_expr = self.parse_ref_expr()?;
                 self.eat_or_err(TokenKind::Equals)?;
                 let expr = self.parse_expr(Prec::Bracket)?;
                 self.eat_or_err(TokenKind::Semicolon)?;
-                Stmt::DerefAssign { assign, expr }
+                Stmt::Assign { ref_expr, expr }
             }
             _ => Err(self.unexpected_token())?,
         })

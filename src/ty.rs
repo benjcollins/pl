@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use crate::{infer::{InferTyRef, Unify, unify}, symbols::Symbol};
 
@@ -61,7 +61,10 @@ impl Unify for Ty {
             (Ty::Ref(a), Ty::Ref(b)) => Ok(Ty::Ref(unify(&a, &b)?)),
             (Ty::Int(a), Ty::Int(b)) => Ok(Ty::Int(unify(&a, &b)?)),
             (Ty::Struct(a), Ty::Struct(b)) => Ok(Ty::Struct(unify(&a, &b)?)),
-            _ => Err(())?,
+            (a, b) => {
+                println!("{:?}\n{:?}", a, b);
+                Err(())?
+            }
         }
     }
 }
@@ -109,43 +112,43 @@ impl Unify for StructTy {
     }
 }
 
-// impl fmt::Display for IntTy {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             IntTy::Int(int) => {
-//                 let signedness = match int.signedness {
-//                     Signedness::Signed => "i",
-//                     Signedness::Unsigned => "u",
-//                 };
-//                 let size = match int.size {
-//                     Size::B8 => "8",
-//                     Size::B16 => "16",
-//                     Size::B32 => "32",
-//                 };
-//                 write!(f, "{}{}", signedness, size)
-//             }
-//             IntTy::Any => write!(f, "int?"),
-//         }
-//     }
-// }
+impl fmt::Display for IntTy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IntTy::Int(int) => {
+                let signedness = match int.signedness {
+                    Signedness::Signed => "i",
+                    Signedness::Unsigned => "u",
+                };
+                let size = match int.size {
+                    Size::B8 => "8",
+                    Size::B16 => "16",
+                    Size::B32 => "32",
+                };
+                write!(f, "{}{}", signedness, size)
+            }
+            IntTy::Any => write!(f, "int?"),
+        }
+    }
+}
 
-// impl fmt::Display for Ty {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             Ty::Bool => write!(f, "bool"),
-//             Ty::Ref(ty) => write!(f, "&{}", ty),
-//             Ty::Int(int_ty) => write!(f, "{}", int_ty),
-//             Ty::Struct(s) => write!(f, "{}", s),
-//             Ty::Any => write!(f, "any?"),
-//         }
-//     }
-// }
+impl fmt::Display for Ty {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Ty::Bool => write!(f, "bool"),
+            Ty::Ref(ty) => write!(f, "&{}", ty),
+            Ty::Int(int_ty) => write!(f, "{}", int_ty),
+            Ty::Struct(s) => write!(f, "{}", s),
+            Ty::Any => write!(f, "any?"),
+        }
+    }
+}
 
-// impl fmt::Display for StructTy {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             StructTy::Known { name, .. } => write!(f, "{}", name),
-//             StructTy::WithFields(_) => write!(f, "struct?"),
-//         }
-//     }
-// }
+impl fmt::Display for StructTy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StructTy::Known { name, .. } => write!(f, "{}", name.0),
+            StructTy::WithFields(_) => write!(f, "struct?"),
+        }
+    }
+}

@@ -33,11 +33,6 @@ pub enum Branch {
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Alloc(TyRef),
-    DerefAssign {
-        assign: Expr,
-        expr: Expr,
-        ty: TyRef,
-    },
     Assign {
         ref_expr: RefExpr,
         expr: Expr,
@@ -49,6 +44,7 @@ pub enum Stmt {
 #[derive(Debug, Clone)]
 pub enum RefExpr {
     Variable(Variable),
+    Deref(Box<Expr>),
     Field {
         ref_expr: Box<RefExpr>,
         name: Symbol,

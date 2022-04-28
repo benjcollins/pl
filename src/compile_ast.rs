@@ -58,13 +58,13 @@ fn compile_struct(name: Symbol, program: &ast::Program) -> Ty {
 pub fn compile_ty(ty: &ast::Ty, program: &ast::Program) -> TyRef {
     TyRef::new(match ty {
         ast::Ty::Int(int) => Ty::Int(IntTyRef::new(IntTy::Int(match int {
-            ast::Int::I8 => Int { signedness: Signedness::Unsigned, size: Size::B8 },
-            ast::Int::I16 => Int { signedness: Signedness::Unsigned, size: Size::B16 },
-            ast::Int::I32 => Int { signedness: Signedness::Unsigned, size: Size::B32 },
+            ast::Int::I8 => Int { signedness: Signedness::Signed, size: Size::B8 },
+            ast::Int::I16 => Int { signedness: Signedness::Signed, size: Size::B16 },
+            ast::Int::I32 => Int { signedness: Signedness::Signed, size: Size::B32 },
 
-            ast::Int::U8 => Int { signedness: Signedness::Signed, size: Size::B8 },
-            ast::Int::U16 => Int { signedness: Signedness::Signed, size: Size::B16 },
-            ast::Int::U32 => Int { signedness: Signedness::Signed, size: Size::B32 },
+            ast::Int::U8 => Int { signedness: Signedness::Unsigned, size: Size::B8 },
+            ast::Int::U16 => Int { signedness: Signedness::Unsigned, size: Size::B16 },
+            ast::Int::U32 => Int { signedness: Signedness::Unsigned, size: Size::B32 },
         }))),
         ast::Ty::Bool => Ty::Bool,
         ast::Ty::Struct(name) => compile_struct(*name, program),
@@ -127,7 +127,7 @@ impl<'a> Compiler<'a> {
                     let ast_ty = compile_ty(ast_ty, self.program);
                     unify(&ty, &ast_ty).unwrap();
                 }
-                
+
                 if let Some(expr) = expr {
                     let (expr, expr_ty) = self.compile_expr(expr);
                     unify(&ty, &expr_ty).unwrap();
@@ -143,12 +143,6 @@ impl<'a> Compiler<'a> {
                 let (expr, ty) = self.compile_expr(expr);
                 unify(&ref_ty, &ty).unwrap();
                 self.push_stmt(*block_id, typed_ast::Stmt::Assign { ref_expr, expr, ty })
-            }
-            ast::Stmt::DerefAssign { assign, expr } => {
-                let (expr, expr_ty) = self.compile_expr(expr);
-                let (assign, ty) = self.compile_expr(assign);
-                unify(&expr_ty, &deref_ty(&ty)).unwrap();
-                self.push_stmt(*block_id, typed_ast::Stmt::DerefAssign { assign, expr, ty: expr_ty });
             }
             ast::Stmt::Return(expr) => {
                 let expr = expr.as_ref().map(|expr| self.compile_expr(expr));
@@ -191,6 +185,10 @@ impl<'a> Compiler<'a> {
                 let ty = TyRef::new(Ty::Struct(struct_ty.clone()));
                 unify(&ty, &ref_expr_ty).unwrap();
                 (typed_ast::RefExpr::Field { ref_expr: Box::new(ref_expr), name: *name, ty: struct_ty }, field_ty)
+            }
+            ast::RefExpr::Deref(expr) => {
+                let (expr, ty) = self.compile_expr(expr);
+                (typed_ast::RefExpr::Deref(Box::new(expr)), deref_ty(&ty))
             }
         }
     }
@@ -300,8 +298,8 @@ impl<'a> Compiler<'a> {
                 let mut with_fields = HashMap::new();
                 with_fields.insert(*name, field_ty.clone());
                 let struct_ty = StructTyRef::new(StructTy::WithFields(with_fields));
-                let ty = TyRef::new(Ty::Struct(struct_ty.clone()));
-                unify(&ty, &expr_ty).unwrap();
+                let derefs_ty = TyRef::new(Ty::Struct(struct_ty.clone()));
+                unify(&derefs_ty, &expr_ty).unwrap();
                 (typed_ast::Expr::Field { expr: Box::new(expr), name: *name, ty: struct_ty }, field_ty)
             }
         }

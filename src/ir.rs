@@ -41,11 +41,6 @@ pub enum Branch {
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Alloc(Ty),
-    DerefAssign {
-        assign: Expr,
-        ty: Ty,
-        expr: Expr,
-    },
     Assign {
         ref_expr: RefExpr,
         ty: Ty,
@@ -85,6 +80,7 @@ pub enum Expr {
 #[derive(Debug, Clone)]
 pub enum RefExpr {
     Variable(typed_ast::Variable),
+    Deref(Box<Expr>),
     Field {
         ref_expr: Box<RefExpr>,
         fields: Vec<StructField>,

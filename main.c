@@ -12,3 +12,7 @@ struct Point {
 void print_point(struct Point *p) {
     printf("(%d, %d)\n", p->x, p->y);
 }
+
+void print_int_ptr(int *ptr) {
+    printf("%p\n", ptr);
+}

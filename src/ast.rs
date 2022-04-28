@@ -45,6 +45,7 @@ pub enum Expr {
 #[derive(Debug, Clone)]
 pub enum RefExpr {
     Ident(Symbol),
+    Deref(Expr),
     Field {
         ref_expr: Box<RefExpr>,
         name: Symbol,
@@ -82,10 +83,6 @@ pub enum Stmt {
     Assign {
         ref_expr: RefExpr,
         expr: Expr,
-    },
-    DerefAssign {
-        assign: Expr,
-        expr: Expr
     },
     While {
         cond: Expr,

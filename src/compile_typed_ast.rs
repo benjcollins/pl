@@ -49,9 +49,6 @@ fn lower_block(block: &typed_ast::Block) -> ir::Block {
 fn lower_stmt(stmt: &typed_ast::Stmt) -> ir::Stmt {
     match stmt {
         typed_ast::Stmt::Alloc(ty) => ir::Stmt::Alloc(concrete_ty(ty)),
-        typed_ast::Stmt::DerefAssign { assign, expr, ty } => {
-            ir::Stmt::DerefAssign { assign: lower_expr(assign), expr: lower_expr(expr), ty: concrete_ty(ty) }
-        }
         typed_ast::Stmt::Assign { ref_expr, expr, ty } => {
             ir::Stmt::Assign { ref_expr: lower_ref_expr(ref_expr), ty: concrete_ty(ty), expr: lower_expr(expr) }
         }
@@ -69,6 +66,10 @@ fn lower_ref_expr(ref_expr: &typed_ast::RefExpr) -> ir::RefExpr {
             let ref_expr = Box::new(lower_ref_expr(ref_expr));
             let fields = concrete_struct(ty);
             ir::RefExpr::Field { ref_expr, fields, name: *name }
+        }
+        typed_ast::RefExpr::Deref(expr) => {
+            let expr = Box::new(lower_expr(expr));
+            ir::RefExpr::Deref(expr)
         }
     }
 }
