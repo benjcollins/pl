@@ -16,7 +16,13 @@ mod compile_typed_ast;
 fn main() {
     let src = include_str!("../example.txt");
     let tokens = lexer::lex(src);
-    let (program, symbols) = parser::parse(&tokens, src).unwrap();
+    let (program, symbols) = match parser::parse(&tokens, src) {
+        Ok(r) => r,
+        Err(e) => {
+            println!("{}", e);
+            return
+        }
+    };
     let mut func_mirs = vec![];
     for (name, func_ast) in &program.funcs {
         if let Some(func_mir) = compile_ast::compile_func(*name, func_ast, &program) {

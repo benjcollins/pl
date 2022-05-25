@@ -7,7 +7,7 @@ struct Point {
     y: i32
 }
 
-func point(x: i32, y: i32): Point {
+func create_point(x: i32, y: i32): Point {
     return Point { x: x, y: y };
 }
 
@@ -24,14 +24,14 @@ func sum(s: *i32, n: i32) {
 }
 
 func main() {
-    var p = point(9, 7);
-    var p_p = &p;
-    var p_x = &(*p_p).x;
-    print_int(*p_x);
-    *p_x = 5;
+    var point = create_point(9, 7);
+    var p_point = &p;
+    var p_point_x = &(*p_p).x;
+    print_int(*p_point_x);
+    *p_point_x = 5;
 
-    print_int_ptr(p_x);
-    print_int_ptr(&p.x);
-    print_int_ptr(&(*p_p).x);
-    print_point(&p);
+    print_int_ptr(p_point_x);
+    print_int_ptr(&point.x);
+    print_int_ptr(&(*p_point).x);
+    print_point(&point);
 }

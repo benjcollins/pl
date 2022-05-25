@@ -1,115 +1,88 @@
-use crate::token::{Token, TokenKind};
+use strum::IntoEnumIterator;
 
-pub fn lex<'a>(src: &'a str) -> Vec<Token> {
-    let mut lexer = Lexer {
-        offset: 0,
-        tokens: vec![],
-        src,
-    };
-    loop {
-        let ch = match lexer.peek_char() {
-            Some(ch) => ch,
-            None => break,
-        };
-        match ch {
-            ch if ch.is_whitespace() => lexer.next_while(|ch| ch.is_whitespace()),
-            ch if ch.is_numeric() => {
-                let offset = lexer.offset;
-                lexer.next_while(|ch| ch.is_numeric());
-                lexer.push_token(offset, TokenKind::Integer);
-            }
-            ch if ch.is_alphabetic() || ch == '_' => {
-                let offset = lexer.offset;
-                lexer.next_while(|ch| ch.is_alphanumeric() || ch == '_');
-                let content = &lexer.src[offset..lexer.offset];
-                let kind = match content {
-                    "var" => TokenKind::Var,
-                    "func" => TokenKind::Func,
-                    "return" => TokenKind::Return,
-                    "true" => TokenKind::True,
-                    "false" => TokenKind::False,
-                    "if" => TokenKind::If,
-                    "else" => TokenKind::Else,
-                    "while" => TokenKind::While,
-                    "struct" => TokenKind::Struct,
-                    "i8" => TokenKind::I8,
-                    "i16" => TokenKind::I16,
-                    "i32" => TokenKind::I32,
-                    "u8" => TokenKind::U8,
-                    "u16" => TokenKind::U16,
-                    "u32" => TokenKind::U32,
-                    "bool" => TokenKind::Bool,
-                    _ => TokenKind::Ident,
-                };
-                lexer.push_token(offset, kind);
-            }
-            '#' => {
-                lexer.next_while(|ch| ch != '\n');
-            }
-            '(' => lexer.single_char_token(TokenKind::OpenBrace),
-            ')' => lexer.single_char_token(TokenKind::CloseBrace),
-            '{' => lexer.single_char_token(TokenKind::OpenCurlyBrace),
-            '}' => lexer.single_char_token(TokenKind::CloseCurlyBrace),
-            '<' => lexer.single_char_token(TokenKind::OpenAngleBrace),
-            '>' => lexer.single_char_token(TokenKind::CloseAngleBrace),
-            '+' => lexer.single_char_token(TokenKind::Plus),
-            '-' => lexer.single_char_token(TokenKind::Minus),
-            '*' => lexer.single_char_token(TokenKind::Asterisk),
-            '/' => lexer.single_char_token(TokenKind::ForwardSlash),
-            '=' => lexer.single_char_token(TokenKind::Equals),
-            ',' => lexer.single_char_token(TokenKind::Comma),
-            ':' => lexer.single_char_token(TokenKind::Colon),
-            ';' => lexer.single_char_token(TokenKind::Semicolon),
-            '&' => lexer.single_char_token(TokenKind::Ampersand),
-            '.' => lexer.single_char_token(TokenKind::Dot),
-            _ => panic!(),
-        }
-    }
-    lexer.tokens
+use crate::token::{Token, TokenKind, Symbol, Keyword};
+
+#[derive(Debug, Clone, Copy)]
+pub struct Lexer<'a> {
+    pub offset: usize,
+    pub source: &'a str,
 }
 
-struct Lexer<'a> {
-    src: &'a str,
-    offset: usize,
-    tokens: Vec<Token>,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Position {
+    pub line: u32,
+    pub column: u32,
+}
+
+pub fn lex<'a>(source: &'a str) -> Vec<Token> {
+    Lexer { offset: 0, source }.collect()
+}
+
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_token()
+    }
 }
 
 impl<'a> Lexer<'a> {
-    fn peek_char(&self) -> Option<char> {
-        self.src[self.offset..].chars().next()
-    }
-    fn next(&mut self) {
-        match self.peek_char() {
-            Some(ch) => self.offset += ch.len_utf8(),
-            None => panic!(),
+    fn eat_str(&mut self, str: &str) -> bool {
+        if self.source[self.offset..].starts_with(str) {
+            self.offset += str.len();
+            true
+        } else {
+            false
         }
     }
-    fn next_if(&mut self, cond: impl Fn(char) -> bool) -> bool {
-        match self.peek_char() {
-            Some(ch) => {
-                if cond(ch) {
-                    self.offset += ch.len_utf8();
-                    true
-                } else {
-                    false
+    fn eat_if(&mut self, f: impl Fn(char) -> bool) -> bool {
+        let ch = self.source[self.offset..].chars().next();
+        if ch.map_or(false, f) {
+            self.offset += ch.map_or(0, |ch| ch.len_utf8());
+            true
+        } else {
+            false
+        }
+    }
+    fn eat_while(&mut self, f: impl Fn(char) -> bool + Copy) {
+        loop {
+            if !self.eat_if(f) { break }
+        }
+    }
+    pub fn next_token(&mut self) -> Option<Token> {
+        if self.offset >= self.source.len() {
+            return None
+        }
+
+        loop {
+            let offset = self.offset;
+
+            if self.eat_str("//") {
+                self.eat_while(|ch| ch == '\n');
+                continue
+            }
+            if self.eat_if(|ch| ch.is_whitespace()) {
+                continue
+            }
+            if self.eat_if(|ch| ch.is_numeric()) {
+                self.eat_while(|ch| ch.is_numeric());
+                return Some(Token { kind: TokenKind::Integer, offset })
+            }
+            if self.eat_if(|ch| ch.is_alphabetic() || ch == '_') {
+                self.eat_while(|ch| ch.is_alphanumeric() || ch == '_');
+                for keyword in Keyword::iter() {
+                    if keyword.str() == &self.source[offset..self.offset] {
+                        return Some(Token { kind: TokenKind::Keyword(keyword), offset })
+                    }
+                }
+                return Some(Token { kind: TokenKind::Ident, offset })
+            }
+            for symbol in Symbol::iter() {
+                if self.eat_str(symbol.str()) {
+                    return Some(Token { kind: TokenKind::Symbol(symbol), offset })
                 }
             }
-            None => false
+            panic!("{}", &self.source[self.offset..])
         }
-    }
-    fn next_while(&mut self, cond: impl Fn(char) -> bool) {
-        while self.next_if(&cond) {}
-    }
-    fn push_token(&mut self, start: usize, kind: TokenKind) {
-        self.tokens.push(Token {
-            start,
-            end: self.offset,
-            kind,
-        })
-    }
-    fn single_char_token(&mut self, kind: TokenKind) {
-        let offset = self.offset;
-        self.next();
-        self.push_token(offset, kind);
     }
 }
