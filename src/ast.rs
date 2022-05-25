@@ -135,15 +135,18 @@ pub struct Func {
     pub body: Option<Block>,
 }
 
+#[derive(Debug, Clone)]
 pub struct Struct {
     pub fields: Vec<StructField>,
 }
 
+#[derive(Debug, Clone)]
 pub struct StructField {
     pub name: Symbol,
     pub ty: Ty,
 }
 
+#[derive(Debug, Clone)]
 pub struct Program {
     pub funcs: HashMap<Symbol, Func>,
     pub structs: HashMap<Symbol, Struct>,

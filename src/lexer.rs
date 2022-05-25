@@ -50,15 +50,15 @@ impl<'a> Lexer<'a> {
         }
     }
     pub fn next_token(&mut self) -> Option<Token> {
-        if self.offset >= self.source.len() {
-            return None
-        }
-
         loop {
+            if self.offset >= self.source.len() {
+                return None
+            }
+
             let offset = self.offset;
 
             if self.eat_str("//") {
-                self.eat_while(|ch| ch == '\n');
+                self.eat_while(|ch| ch != '\n');
                 continue
             }
             if self.eat_if(|ch| ch.is_whitespace()) {

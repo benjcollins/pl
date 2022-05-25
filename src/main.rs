@@ -23,6 +23,9 @@ fn main() {
             return
         }
     };
+
+    println!("{:#?}", program);
+
     let mut func_mirs = vec![];
     for (name, func_ast) in &program.funcs {
         if let Some(func_mir) = compile_ast::compile_func(*name, func_ast, &program) {

@@ -1,6 +1,6 @@
-func print_int(n: i32)
-func print_point(p: *Point)
-func print_int_ptr(ptr: *i32)
+func print_int(int: i32)
+func print_point(p_point: *Point)
+func print_int_ptr(p_int: *i32)
 
 struct Point {
     x: i32,
@@ -25,8 +25,8 @@ func sum(s: *i32, n: i32) {
 
 func main() {
     var point = create_point(9, 7);
-    var p_point = &p;
-    var p_point_x = &(*p_p).x;
+    var p_point = &point;
+    var p_point_x = &(*p_point).x;
     print_int(*p_point_x);
     *p_point_x = 5;
 
