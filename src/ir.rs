@@ -1,4 +1,4 @@
-use crate::{ty::Int, typed_ast, symbols::Symbol};
+use crate::{symbols::Symbol, ty::Int, typed_ast};
 
 #[derive(Debug, Clone)]
 pub enum Ty {
@@ -74,7 +74,7 @@ pub enum Expr {
         expr: Box<Expr>,
         fields: Vec<StructField>,
         name: Symbol,
-    }
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -85,7 +85,7 @@ pub enum RefExpr {
         ref_expr: Box<RefExpr>,
         fields: Vec<StructField>,
         name: Symbol,
-    }
+    },
 }
 
 #[derive(Debug, Clone)]

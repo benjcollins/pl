@@ -1,17 +1,17 @@
-func print_int(int: i32)
-func print_point(p_point: *Point)
-func print_int_ptr(p_int: *i32)
+func print_int(int: i32);
+func print_point(p_point: *Point);
+func print_int_ptr(p_int: *i32);
 
 struct Point {
     x: i32,
     y: i32
 }
 
-func create_point(x: i32, y: i32): Point {
+func create_point(x: i32, y: i32) Point {
     return Point { x: x, y: y };
 }
 
-func fib(n: i32): i32 {
+func fib(n: i32) i32 {
     if n < 2 {
         return 1;
     } else {
@@ -34,4 +34,23 @@ func main() {
     print_int_ptr(&point.x);
     print_int_ptr(&(*p_point).x);
     print_point(&point);
+
+    var n = 0;
+    while n < 10 {
+        print_int(fib(n));
+        n = n + 1;
+    }
+
+    // var a = 1;
+    // var b = 0;
+    // var n = 0;
+
+    // while n < 20 {
+    //     print_int(a);
+
+    //     n = n + 1;
+    //     var c = a;
+    //     a = a + b;
+    //     b = c;
+    // }
 }

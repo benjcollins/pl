@@ -1,6 +1,13 @@
 use std::{collections::HashMap, fmt};
 
-use crate::{token::{Token, TokenKind, Symbol, Keyword}, ast::{Expr, InfixOp, Stmt, Else, If, Block, Ty, Func, PrefixOp, Param, FuncCall, Struct, StructField, Program, StructValue, Int, RefExpr}, symbols::Symbols};
+use crate::{
+    ast::{
+        Block, Else, Expr, Func, FuncCall, If, InfixOp, Int, Param, PrefixOp, Program, RefExpr,
+        Stmt, Struct, StructField, StructValue, Ty,
+    },
+    symbols::Symbols,
+    token::{Keyword, Symbol, Token, TokenKind},
+};
 
 pub fn parse<'a, 'b>(tokens: &'b [Token], src: &'a str) -> ParseResult<'a, (Program, Symbols<'a>)> {
     let mut parser = Parser {
@@ -73,9 +80,17 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.index >= self.tokens.len()
     }
     fn unexpected_token(&self) -> ParseError<'a> {
-        ParseError { token: self.tokens[self.index], source: self.source }
+        ParseError {
+            token: self.tokens[self.index],
+            source: self.source,
+        }
     }
-    fn parse_list<T>(&mut self, sep: TokenKind, term: TokenKind, f: impl Fn(&mut Parser<'a, 'b>) -> ParseResult<'a, T>) -> ParseResult<'a, Vec<T>> {
+    fn parse_list<T>(
+        &mut self,
+        sep: TokenKind,
+        term: TokenKind,
+        f: impl Fn(&mut Parser<'a, 'b>) -> ParseResult<'a, T>,
+    ) -> ParseResult<'a, Vec<T>> {
         let mut items = vec![];
         if self.peek() != term {
             items.push(f(self)?);
@@ -104,7 +119,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let ident = self.next().str(self.source);
                 RefExpr::Ident(self.symbols.get_symbol(ident))
             }
-            _ => Err(self.unexpected_token())?
+            _ => Err(self.unexpected_token())?,
         };
         self.parse_ref_expr_fields(value)
     }
@@ -115,9 +130,12 @@ impl<'a, 'b> Parser<'a, 'b> {
                     self.next();
                     let ident = self.expect(TokenKind::Ident)?.str(self.source);
                     let name = self.symbols.get_symbol(ident);
-                    left = RefExpr::Field { ref_expr: Box::new(left), name };
+                    left = RefExpr::Field {
+                        ref_expr: Box::new(left),
+                        name,
+                    };
                 }
-                _ => break Ok(left)
+                _ => break Ok(left),
             }
         }
     }
@@ -128,33 +146,41 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.next();
                 Expr::Ref(Box::new(self.parse_ref_expr()?))
             }
-
             TokenKind::Ident => {
                 let name = self.next().str(self.source);
                 let symbol = self.symbols.get_symbol(name);
                 match self.peek() {
                     TokenKind::Symbol(Symbol::OpenBrace) => {
                         self.next();
-                        let args = self.parse_list(TokenKind::Symbol(Symbol::Comma), TokenKind::Symbol(Symbol::CloseBrace), |parser| parser.parse_expr(Prec::Bracket))?;
+                        let args = self.parse_list(
+                            TokenKind::Symbol(Symbol::Comma),
+                            TokenKind::Symbol(Symbol::CloseBrace),
+                            |parser| parser.parse_expr(Prec::Bracket),
+                        )?;
                         Expr::FuncCall(FuncCall { name: symbol, args })
                     }
                     TokenKind::Symbol(Symbol::OpenCurlyBrace) => {
                         self.next();
-                        let values = self.parse_list(TokenKind::Symbol(Symbol::Comma), TokenKind::Symbol(Symbol::CloseCurlyBrace), |parser| {
-                            let name = parser.expect(TokenKind::Ident)?.str(self.source);
-                            let symbol = parser.symbols.get_symbol(name);
-                            parser.expect(TokenKind::Symbol(Symbol::Colon))?;
-                            let expr = parser.parse_expr(Prec::Bracket)?;
-                            Ok(StructValue { name: symbol, expr })
-                        })?;
-                        Expr::InitStruct { name: symbol, values }
+                        let values = self.parse_list(
+                            TokenKind::Symbol(Symbol::Comma),
+                            TokenKind::Symbol(Symbol::CloseCurlyBrace),
+                            |parser| {
+                                let name = parser.expect(TokenKind::Ident)?.str(self.source);
+                                let symbol = parser.symbols.get_symbol(name);
+                                parser.expect(TokenKind::Symbol(Symbol::Colon))?;
+                                let expr = parser.parse_expr(Prec::Bracket)?;
+                                Ok(StructValue { name: symbol, expr })
+                            },
+                        )?;
+                        Expr::InitStruct {
+                            name: symbol,
+                            values,
+                        }
                     }
-                    _ => Expr::Ident(symbol)
+                    _ => Expr::Ident(symbol),
                 }
             }
-            TokenKind::Integer => {
-                Expr::Integer(self.next().str(self.source).parse().unwrap())
-            }
+            TokenKind::Integer => Expr::Integer(self.next().str(self.source).parse().unwrap()),
             TokenKind::Keyword(Keyword::True) => {
                 self.next();
                 Expr::Bool(true)
@@ -174,19 +200,34 @@ impl<'a, 'b> Parser<'a, 'b> {
         };
         loop {
             left = match self.peek() {
-                TokenKind::Symbol(Symbol::Plus) if prec >= Prec::Sum => self.parse_infix(left, InfixOp::Add, Prec::Sum)?,
-                TokenKind::Symbol(Symbol::Minus) if prec >= Prec::Sum => self.parse_infix(left, InfixOp::Subtract, Prec::Sum)?,
-                TokenKind::Symbol(Symbol::Asterisk) if prec >= Prec::Product => self.parse_infix(left, InfixOp::Multiply, Prec::Product)?,
-                TokenKind::Symbol(Symbol::ForwardSlash) if prec >= Prec::Product => self.parse_infix(left, InfixOp::Divide, Prec::Product)?,
-                TokenKind::Symbol(Symbol::OpenAngleBrace) if prec >= Prec::Compare => self.parse_infix(left, InfixOp::LessThan, Prec::Compare)?,
-                TokenKind::Symbol(Symbol::CloseAngleBrace) if prec >= Prec::Compare => self.parse_infix(left, InfixOp::GreaterThan, Prec::Compare)?,
+                TokenKind::Symbol(Symbol::Plus) if prec >= Prec::Sum => {
+                    self.parse_infix(left, InfixOp::Add, Prec::Sum)?
+                }
+                TokenKind::Symbol(Symbol::Minus) if prec >= Prec::Sum => {
+                    self.parse_infix(left, InfixOp::Subtract, Prec::Sum)?
+                }
+                TokenKind::Symbol(Symbol::Asterisk) if prec >= Prec::Product => {
+                    self.parse_infix(left, InfixOp::Multiply, Prec::Product)?
+                }
+                TokenKind::Symbol(Symbol::ForwardSlash) if prec >= Prec::Product => {
+                    self.parse_infix(left, InfixOp::Divide, Prec::Product)?
+                }
+                TokenKind::Symbol(Symbol::OpenAngleBrace) if prec >= Prec::Compare => {
+                    self.parse_infix(left, InfixOp::LessThan, Prec::Compare)?
+                }
+                TokenKind::Symbol(Symbol::CloseAngleBrace) if prec >= Prec::Compare => {
+                    self.parse_infix(left, InfixOp::GreaterThan, Prec::Compare)?
+                }
                 TokenKind::Symbol(Symbol::Dot) if prec >= Prec::Dot => {
                     self.next();
                     let name = self.expect(TokenKind::Ident)?.str(self.source);
                     let symbol = self.symbols.get_symbol(name);
-                    Expr::Field { expr: Box::new(left), name: symbol }
+                    Expr::Field {
+                        expr: Box::new(left),
+                        name: symbol,
+                    }
                 }
-                _ => break
+                _ => break,
             }
         }
         Ok(left)
@@ -218,7 +259,11 @@ impl<'a, 'b> Parser<'a, 'b> {
         } else {
             Else::None
         };
-        Ok(If { cond, if_block, else_block })
+        Ok(If {
+            cond,
+            if_block,
+            else_block,
+        })
     }
     fn parse_stmt(&mut self) -> ParseResult<'a, Stmt> {
         Ok(match self.peek() {
@@ -250,7 +295,11 @@ impl<'a, 'b> Parser<'a, 'b> {
                     None
                 };
                 self.expect(TokenKind::Symbol(Symbol::Semicolon))?;
-                Stmt::Let { ident: symbol, expr, ty }
+                Stmt::Let {
+                    ident: symbol,
+                    expr,
+                    ty,
+                }
             }
             TokenKind::Keyword(Keyword::Return) => {
                 self.next();
@@ -267,7 +316,11 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let symbol = self.symbols.get_symbol(name);
                 let stmt = if self.peek() == TokenKind::Symbol(Symbol::OpenBrace) {
                     self.next();
-                    let args = self.parse_list(TokenKind::Symbol(Symbol::Comma), TokenKind::Symbol(Symbol::CloseBrace), |parser| parser.parse_expr(Prec::Bracket))?;
+                    let args = self.parse_list(
+                        TokenKind::Symbol(Symbol::Comma),
+                        TokenKind::Symbol(Symbol::CloseBrace),
+                        |parser| parser.parse_expr(Prec::Bracket),
+                    )?;
                     Stmt::FuncCall(FuncCall { name: symbol, args })
                 } else {
                     let ref_expr = self.parse_ref_expr_fields(RefExpr::Ident(symbol))?;
@@ -326,34 +379,48 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
     fn parse_func(&mut self) -> ParseResult<'a, Func> {
         self.expect(TokenKind::Symbol(Symbol::OpenBrace))?;
-        let params = self.parse_list(TokenKind::Symbol(Symbol::Comma), TokenKind::Symbol(Symbol::CloseBrace), |parser| {
-            let name = parser.expect(TokenKind::Ident)?.str(self.source);
-            let symbol = parser.symbols.get_symbol(name);
-            parser.expect(TokenKind::Symbol(Symbol::Colon))?;
-            let ty = parser.parse_ty()?;
-            Ok(Param { name: symbol, ty })
-        })?;
-        let returns = if self.eat(TokenKind::Symbol(Symbol::Colon)) {
-            Some(self.parse_ty()?)
-        } else {
-            None
+        let params = self.parse_list(
+            TokenKind::Symbol(Symbol::Comma),
+            TokenKind::Symbol(Symbol::CloseBrace),
+            |parser| {
+                let name = parser.expect(TokenKind::Ident)?.str(self.source);
+                let symbol = parser.symbols.get_symbol(name);
+                parser.expect(TokenKind::Symbol(Symbol::Colon))?;
+                let ty = parser.parse_ty()?;
+                Ok(Param { name: symbol, ty })
+            },
+        )?;
+        let returns = match self.peek() {
+            TokenKind::Symbol(Symbol::OpenCurlyBrace | Symbol::Semicolon) => None,
+            _ => Some(self.parse_ty()?),
         };
-        let body = if self.peek() == TokenKind::Symbol(Symbol::OpenCurlyBrace) {
-            Some(self.parse_block()?)
-        } else {
-            None
+        let body = match self.peek() {
+            TokenKind::Symbol(Symbol::Semicolon) => {
+                self.next();
+                None
+            }
+            TokenKind::Symbol(Symbol::OpenCurlyBrace) => Some(self.parse_block()?),
+            _ => return Err(self.unexpected_token()),
         };
-        Ok(Func { body, params, returns })
+        Ok(Func {
+            body,
+            params,
+            returns,
+        })
     }
     fn parse_struct(&mut self) -> ParseResult<'a, Struct> {
         self.expect(TokenKind::Symbol(Symbol::OpenCurlyBrace))?;
-        let fields = self.parse_list(TokenKind::Symbol(Symbol::Comma), TokenKind::Symbol(Symbol::CloseCurlyBrace), |parser| {
-            let name = parser.expect(TokenKind::Ident)?.str(self.source);
-            let symbol = parser.symbols.get_symbol(name);
-            parser.expect(TokenKind::Symbol(Symbol::Colon))?;
-            let ty = parser.parse_ty()?;
-            Ok(StructField { name: symbol, ty })
-        })?;
+        let fields = self.parse_list(
+            TokenKind::Symbol(Symbol::Comma),
+            TokenKind::Symbol(Symbol::CloseCurlyBrace),
+            |parser| {
+                let name = parser.expect(TokenKind::Ident)?.str(self.source);
+                let symbol = parser.symbols.get_symbol(name);
+                parser.expect(TokenKind::Symbol(Symbol::Colon))?;
+                let ty = parser.parse_ty()?;
+                Ok(StructField { name: symbol, ty })
+            },
+        )?;
         Ok(Struct { fields })
     }
     fn parse_file(&mut self) -> ParseResult<'a, Program> {

@@ -24,7 +24,7 @@ fn main() {
         }
     };
 
-    println!("{:#?}", program);
+    // println!("{:#?}", program);
 
     let mut func_mirs = vec![];
     for (name, func_ast) in &program.funcs {

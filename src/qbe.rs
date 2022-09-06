@@ -1,6 +1,15 @@
-use std::{io::{Write, self}, fmt, iter::repeat_with};
+use std::{
+    fmt,
+    io::{self, Write},
+    iter::repeat_with,
+};
 
-use crate::{ty::{Size, Signedness}, ast, symbols::{Symbols, Symbol}, ir, typed_ast};
+use crate::{
+    ast, ir,
+    symbols::{Symbol, Symbols},
+    ty::{Signedness, Size},
+    typed_ast,
+};
 
 struct Compiler<'a, W: Write> {
     stack_slots: Vec<Temp>,
@@ -28,7 +37,7 @@ fn size_bytes(ty: &ir::Ty) -> u32 {
             Size::B8 => 1,
             Size::B16 => 2,
             Size::B32 => 4,
-        }
+        },
         ir::Ty::Ptr => 8,
         ir::Ty::Struct(fields) => {
             let mut size = 0;
@@ -41,7 +50,7 @@ fn size_bytes(ty: &ir::Ty) -> u32 {
 }
 
 fn align_to(offset: u32, align: u32) -> u32 {
-    (offset + align - 1) & !(align-1)
+    (offset + align - 1) & !(align - 1)
 }
 
 fn align_bytes(ty: &ir::Ty) -> u32 {
@@ -51,12 +60,12 @@ fn align_bytes(ty: &ir::Ty) -> u32 {
             Size::B8 => 1,
             Size::B16 => 2,
             Size::B32 => 4,
-        }
+        },
         ir::Ty::Ptr => 8,
         ir::Ty::Struct(fields) => {
             let mut max = 0;
             for field in fields {
-                let align =  align_bytes(&field.ty);
+                let align = align_bytes(&field.ty);
                 if align > max {
                     max = align
                 }
@@ -109,7 +118,12 @@ impl fmt::Display for Label {
     }
 }
 
-pub fn compile_fun<'a, W: Write>(func: &ir::Func, output: W, symbols: &'a Symbols<'a>, program: &ast::Program) -> io::Result<()> {
+pub fn compile_fun<'a, W: Write>(
+    func: &ir::Func,
+    output: W,
+    symbols: &'a Symbols<'a>,
+    program: &ast::Program,
+) -> io::Result<()> {
     let mut compiler = Compiler {
         stack_slots: vec![],
         temp_count: 0,
@@ -123,12 +137,24 @@ pub fn compile_fun<'a, W: Write>(func: &ir::Func, output: W, symbols: &'a Symbol
         write!(compiler.output, "{} ", TyName::new(ty, symbols))?;
     }
     write!(compiler.output, "${}(", symbols.get_str(func.name))?;
-    let param_temps: Vec<_> = repeat_with(|| compiler.new_temp()).take(func_ast.params.len()).collect();
+    let param_temps: Vec<_> = repeat_with(|| compiler.new_temp())
+        .take(func_ast.params.len())
+        .collect();
     let mut param_iter = param_temps.iter().zip(&func_ast.params);
     if let Some((temp, param)) = param_iter.next() {
-        write!(compiler.output, "{} {}", TyName::new(&param.ty, symbols), temp)?;
+        write!(
+            compiler.output,
+            "{} {}",
+            TyName::new(&param.ty, symbols),
+            temp
+        )?;
         for (temp, param) in param_iter {
-            write!(compiler.output, ", {} {}", TyName::new(&param.ty, symbols), temp)?;
+            write!(
+                compiler.output,
+                ", {} {}",
+                TyName::new(&param.ty, symbols),
+                temp
+            )?;
         }
     }
     writeln!(compiler.output, ") {{")?;
@@ -146,7 +172,12 @@ pub fn compile_fun<'a, W: Write>(func: &ir::Func, output: W, symbols: &'a Symbol
     Ok(())
 }
 
-pub fn compile_struct<W: Write>(name: Symbol, structure: &ast::Struct, mut output: W, symbols: &Symbols) -> io::Result<()> {
+pub fn compile_struct<W: Write>(
+    name: Symbol,
+    structure: &ast::Struct,
+    mut output: W,
+    symbols: &Symbols,
+) -> io::Result<()> {
     write!(output, "type :{} = {{ ", symbols.get_str(name))?;
     for field in &structure.fields {
         write!(output, "{}, ", TyName::new(&field.ty, symbols))?;
@@ -160,19 +191,27 @@ impl<'a, W: Write> Compiler<'a, W> {
             self.compile_stmt(stmt)?;
         }
         match &block.branch {
-            ir::Branch::Return(expr) => {
-                match expr {
-                    Some(expr) => {
-                        let temp = self.compile_expr(expr)?;
-                        writeln!(self.output, "  ret {}", temp)?;
-                    }
-                    None => writeln!(self.output, "  ret")?,
+            ir::Branch::Return(expr) => match expr {
+                Some(expr) => {
+                    let temp = self.compile_expr(expr)?;
+                    writeln!(self.output, "  ret {}", temp)?;
                 }
-            }
+                None => writeln!(self.output, "  ret")?,
+            },
             ir::Branch::Static(target) => writeln!(self.output, "  jmp {}", Label(target.0))?,
-            ir::Branch::Condition { expr, if_true, if_false } => {
+            ir::Branch::Condition {
+                expr,
+                if_true,
+                if_false,
+            } => {
                 let temp = self.compile_expr(&expr)?;
-                writeln!(self.output, "  jnz {}, {}, {}", temp, Label(if_true.0), Label(if_false.0))?;
+                writeln!(
+                    self.output,
+                    "  jnz {}, {}, {}",
+                    temp,
+                    Label(if_true.0),
+                    Label(if_false.0)
+                )?;
             }
         };
         Ok(())
@@ -216,7 +255,12 @@ impl<'a, W: Write> Compiler<'a, W> {
             ir::Expr::Int(value) => Value::Const(*value),
             ir::Expr::Bool(value) => Value::Const(if *value { 1 } else { 0 }),
 
-            ir::Expr::Binary { left, right, op: bin_op, ty } => {
+            ir::Expr::Binary {
+                left,
+                right,
+                op: bin_op,
+                ty,
+            } => {
                 let left_temp = self.compile_expr(left)?;
                 let right_temp = self.compile_expr(right)?;
                 let op = match bin_op {
@@ -226,18 +270,22 @@ impl<'a, W: Write> Compiler<'a, W> {
                     typed_ast::BinaryOp::Divide => match ty.signedness {
                         Signedness::Signed => "div",
                         Signedness::Unsigned => "udiv",
-                    }
+                    },
                     typed_ast::BinaryOp::LessThan => match ty.signedness {
                         Signedness::Signed => "csltw",
                         Signedness::Unsigned => "cultw",
-                    }
+                    },
                     typed_ast::BinaryOp::GreaterThan => match ty.signedness {
                         Signedness::Signed => "csgtw",
                         Signedness::Unsigned => "cugtw",
-                    }
+                    },
                 };
                 let temp = self.new_temp();
-                writeln!(self.output, "  {} =w {} {}, {}", temp, op, left_temp, right_temp)?;
+                writeln!(
+                    self.output,
+                    "  {} =w {} {}, {}",
+                    temp, op, left_temp, right_temp
+                )?;
                 Value::Temp(temp)
             }
             ir::Expr::Load { var, ty } => {
@@ -254,8 +302,14 @@ impl<'a, W: Write> Compiler<'a, W> {
                 Value::Temp(temp)
             }
             ir::Expr::InitStruct(values) => {
-                let size = values.iter().fold(0, |size, value| align_to(size, align_bytes(&value.ty)) + size_bytes(&value.ty));
-                let align = values.iter().map(|value| align_bytes(&value.ty)).max().unwrap_or(0);
+                let size = values.iter().fold(0, |size, value| {
+                    align_to(size, align_bytes(&value.ty)) + size_bytes(&value.ty)
+                });
+                let align = values
+                    .iter()
+                    .map(|value| align_bytes(&value.ty))
+                    .max()
+                    .unwrap_or(0);
                 let temp = self.alloc_size(size, align)?;
                 let mut offset = 0;
                 for value in values {
@@ -276,13 +330,22 @@ impl<'a, W: Write> Compiler<'a, W> {
             }
         })
     }
-    fn field_addr<'b>(&mut self, struct_addr: Value, fields: &'b [ir::StructField], name: Symbol) -> io::Result<(Temp, &'b ir::Ty)> {
+    fn field_addr<'b>(
+        &mut self,
+        struct_addr: Value,
+        fields: &'b [ir::StructField],
+        name: Symbol,
+    ) -> io::Result<(Temp, &'b ir::Ty)> {
         let mut offset = 0;
         for field in fields {
             offset = align_to(offset, align_bytes(&field.ty));
             if field.name == name {
                 let field_addr = self.new_temp();
-                writeln!(self.output, "  {} =l add {}, {}", field_addr, struct_addr, offset)?;
+                writeln!(
+                    self.output,
+                    "  {} =l add {}, {}",
+                    field_addr, struct_addr, offset
+                )?;
                 return Ok((field_addr, &field.ty));
             }
             offset += size_bytes(&field.ty);
@@ -293,7 +356,11 @@ impl<'a, W: Write> Compiler<'a, W> {
         match ref_expr {
             ir::RefExpr::Variable(var) => Ok(Value::Temp(self.stack_slots[var.0 as usize])),
             ir::RefExpr::Deref(expr) => self.compile_expr(expr),
-            ir::RefExpr::Field { ref_expr, fields, name } => {
+            ir::RefExpr::Field {
+                ref_expr,
+                fields,
+                name,
+            } => {
                 let struct_addr = self.compile_ref_expr(ref_expr)?;
                 let (field_addr, _) = self.field_addr(struct_addr, fields, *name)?;
                 Ok(Value::Temp(field_addr))
@@ -303,7 +370,11 @@ impl<'a, W: Write> Compiler<'a, W> {
     fn compile_func_call(&mut self, func_call: &ir::FuncCall) -> io::Result<Option<Temp>> {
         let func = self.program.funcs.get(&func_call.name).unwrap();
 
-        let values: Vec<_> = func_call.args.iter().map(|expr| self.compile_expr(&expr).unwrap()).collect();
+        let values: Vec<_> = func_call
+            .args
+            .iter()
+            .map(|expr| self.compile_expr(&expr).unwrap())
+            .collect();
         write!(self.output, "  ")?;
         let temp = if let Some(ty) = func.returns.as_ref() {
             let temp = self.new_temp();
@@ -313,18 +384,37 @@ impl<'a, W: Write> Compiler<'a, W> {
             None
         };
 
-        write!(self.output, "call ${}(", self.symbols.get_str(func_call.name))?;
+        write!(
+            self.output,
+            "call ${}(",
+            self.symbols.get_str(func_call.name)
+        )?;
         let mut value_iter = values.iter().zip(&func.params);
         if let Some((temp, param)) = value_iter.next() {
-            write!(self.output, "{} {}", TyName::new(&param.ty, self.symbols), temp)?;
+            write!(
+                self.output,
+                "{} {}",
+                TyName::new(&param.ty, self.symbols),
+                temp
+            )?;
             for (temp, param) in value_iter {
-                write!(self.output, ", {} {}", TyName::new(&param.ty, self.symbols), temp)?;
+                write!(
+                    self.output,
+                    ", {} {}",
+                    TyName::new(&param.ty, self.symbols),
+                    temp
+                )?;
             }
         }
         writeln!(self.output, ")")?;
         Ok(temp)
     }
-    fn copy_struct(&mut self, src: Value, dest: Value, fields: &[ir::StructField]) -> io::Result<()> {
+    fn copy_struct(
+        &mut self,
+        src: Value,
+        dest: Value,
+        fields: &[ir::StructField],
+    ) -> io::Result<()> {
         let mut offset = 0;
         for field in fields {
             offset = align_to(offset, align_bytes(&field.ty));
@@ -332,10 +422,10 @@ impl<'a, W: Write> Compiler<'a, W> {
             let src_off = self.new_temp();
             writeln!(self.output, "  {} =l add {}, {}", src_off, src, offset)?;
             let value = self.load(&field.ty, Value::Temp(src_off))?;
-            
+
             let dest_off = self.new_temp();
             writeln!(self.output, "  {} =l add {}, {}", dest_off, dest, offset)?;
-            
+
             self.store(value, &field.ty, Value::Temp(dest_off))?;
             offset += size_bytes(&field.ty);
         }
