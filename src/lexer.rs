@@ -1,6 +1,9 @@
 use strum::IntoEnumIterator;
 
-use crate::token::{Token, TokenKind, Symbol, Keyword};
+use crate::{
+    token::{Keyword, RawToken, Symbol, TokenKind},
+    tokens::Tokens,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Lexer<'a> {
@@ -14,16 +17,13 @@ pub struct Position {
     pub column: u32,
 }
 
-pub fn lex<'a>(source: &'a str) -> Vec<Token> {
-    Lexer { offset: 0, source }.collect()
-}
-
-impl<'a> Iterator for Lexer<'a> {
-    type Item = Token;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.next_token()
+pub fn lex<'s>(source: &'s str) -> Tokens<'s> {
+    let mut lexer = Lexer { offset: 0, source };
+    let mut raw_tokens = vec![];
+    while let Some(token) = lexer.next_token() {
+        raw_tokens.push(token);
     }
+    Tokens { raw_tokens, source }
 }
 
 impl<'a> Lexer<'a> {
@@ -46,40 +46,54 @@ impl<'a> Lexer<'a> {
     }
     fn eat_while(&mut self, f: impl Fn(char) -> bool + Copy) {
         loop {
-            if !self.eat_if(f) { break }
+            if !self.eat_if(f) {
+                break;
+            }
         }
     }
-    pub fn next_token(&mut self) -> Option<Token> {
+    pub fn next_token(&mut self) -> Option<RawToken> {
         loop {
             if self.offset >= self.source.len() {
-                return None
+                return None;
             }
 
             let offset = self.offset;
 
             if self.eat_str("//") {
                 self.eat_while(|ch| ch != '\n');
-                continue
+                continue;
             }
             if self.eat_if(|ch| ch.is_whitespace()) {
-                continue
+                continue;
             }
             if self.eat_if(|ch| ch.is_numeric()) {
                 self.eat_while(|ch| ch.is_numeric());
-                return Some(Token { kind: TokenKind::Integer, offset })
+                return Some(RawToken {
+                    kind: TokenKind::Integer,
+                    offset,
+                });
             }
             if self.eat_if(|ch| ch.is_alphabetic() || ch == '_') {
                 self.eat_while(|ch| ch.is_alphanumeric() || ch == '_');
                 for keyword in Keyword::iter() {
                     if keyword.str() == &self.source[offset..self.offset] {
-                        return Some(Token { kind: TokenKind::Keyword(keyword), offset })
+                        return Some(RawToken {
+                            kind: TokenKind::Keyword(keyword),
+                            offset,
+                        });
                     }
                 }
-                return Some(Token { kind: TokenKind::Ident, offset })
+                return Some(RawToken {
+                    kind: TokenKind::Ident,
+                    offset,
+                });
             }
             for symbol in Symbol::iter() {
                 if self.eat_str(symbol.str()) {
-                    return Some(Token { kind: TokenKind::Symbol(symbol), offset })
+                    return Some(RawToken {
+                        kind: TokenKind::Symbol(symbol),
+                        offset,
+                    });
                 }
             }
             panic!("{}", &self.source[self.offset..])

@@ -1,26 +1,27 @@
 use std::{fs::File, process::Command};
 
-mod token;
-mod lexer;
 mod ast;
-mod parser;
 mod compile_ast;
-mod typed_ast;
+mod compile_typed_ast;
+mod infer;
+mod ir;
+mod lexer;
+mod parser;
 mod qbe;
 mod symbols;
-mod infer;
+mod token;
+mod tokens;
 mod ty;
-mod ir;
-mod compile_typed_ast;
+mod typed_ast;
 
 fn main() {
-    let src = include_str!("../example.txt");
-    let tokens = lexer::lex(src);
-    let (program, symbols) = match parser::parse(&tokens, src) {
+    let source = include_str!("../example.txt");
+    let tokens = lexer::lex(source);
+    let (program, symbols) = match parser::parse(&tokens) {
         Ok(r) => r,
-        Err(e) => {
-            println!("{}", e);
-            return
+        Err(err) => {
+            println!("{}", err);
+            return;
         }
     };
 
@@ -42,7 +43,13 @@ fn main() {
         let func_lir = compile_typed_ast::lower_func(func_mir);
         qbe::compile_fun(&func_lir, &file, &symbols, &program).unwrap();
     }
-    Command::new("qbe/obj/qbe").args(["output.ssa", "-o", "output.S"]).status().unwrap();
-    Command::new("gcc").args(["-o", "output", "main.c", "output.S"]).status().unwrap();
+    Command::new("qbe/obj/qbe")
+        .args(["output.ssa", "-o", "output.S"])
+        .status()
+        .unwrap();
+    Command::new("gcc")
+        .args(["-o", "output", "main.c", "output.S"])
+        .status()
+        .unwrap();
     Command::new("./output").status().unwrap();
 }

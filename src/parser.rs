@@ -7,23 +7,24 @@ use crate::{
     },
     symbols::Symbols,
     token::{Keyword, Symbol, Token, TokenKind},
+    tokens::{TokenIter, Tokens},
 };
 
-pub fn parse<'a, 'b>(tokens: &'b [Token], src: &'a str) -> ParseResult<'a, (Program, Symbols<'a>)> {
+pub fn parse<'s, 't>(tokens: &Tokens<'s>) -> ParseResult<'s, (Program, Symbols<'s>)> {
+    let mut token_iter = tokens.iter();
+    let token = token_iter.next();
     let mut parser = Parser {
-        index: 0,
-        tokens,
-        source: src,
+        token,
+        token_iter,
         symbols: Symbols::new(),
     };
     Ok((parser.parse_file()?, parser.symbols))
 }
 
-struct Parser<'a, 'b> {
-    tokens: &'b [Token],
-    index: usize,
-    source: &'a str,
-    symbols: Symbols<'a>,
+struct Parser<'s, 't> {
+    token_iter: TokenIter<'t, 's>,
+    token: Option<Token<'s>>,
+    symbols: Symbols<'s>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -36,99 +37,126 @@ enum Prec {
     Bracket,
 }
 
-#[derive(Debug)]
-pub struct ParseError<'a> {
-    pub token: Token,
-    pub source: &'a str,
+#[derive(Debug, Clone, Copy)]
+pub struct ParseError<'s> {
+    pub token: Option<Token<'s>>,
+    pub expected: Expected,
 }
 
-impl<'a> fmt::Display for ParseError<'a> {
+#[derive(Debug, Clone, Copy)]
+pub enum Expected {
+    Token(TokenKind),
+    Expr,
+    Stmt,
+    Type,
+    RefExpr,
+    Decl,
+}
+
+impl<'s> fmt::Display for ParseError<'s> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let pos = self.token.pos(self.source);
-        let str = self.token.str(self.source);
-        write!(f, "syntax error on line {} at token '{}'", pos.line, str)
+        if let Some(token) = self.token {
+            write!(
+                f,
+                "syntax error on line {} at token '{}'",
+                token.pos().line,
+                token.str()
+            )?;
+        } else {
+            write!(f, "syntax error, unexpected end of file")?;
+        }
+        write!(f, " expected ")?;
+        match self.expected {
+            Expected::Token(token) => match token {
+                TokenKind::Ident => write!(f, "an identifier"),
+                TokenKind::Integer => write!(f, "an integer"),
+                TokenKind::Keyword(keyword) => write!(f, "the keyword '{}'", keyword.str()),
+                TokenKind::Symbol(symbol) => write!(f, "the symbol '{}'", symbol.str()),
+            },
+            Expected::Expr => write!(f, "an expression"),
+            Expected::Stmt => write!(f, "a statement"),
+            Expected::Type => write!(f, "a type"),
+            Expected::RefExpr => write!(f, "a reference expression"),
+            Expected::Decl => write!(f, "a top level declaration"),
+        }
     }
 }
 
 type ParseResult<'a, T> = Result<T, ParseError<'a>>;
 
-impl<'a, 'b> Parser<'a, 'b> {
-    fn peek(&self) -> TokenKind {
-        self.tokens[self.index].kind
+impl<'s, 't> Parser<'s, 't> {
+    fn peek(&self) -> Option<TokenKind> {
+        self.token.map(|token| token.kind)
     }
-    fn next(&mut self) -> Token {
-        let token = self.tokens[self.index];
-        self.index += 1;
-        token
+    fn next(&mut self) -> Token<'s> {
+        let last_token = self.token;
+        self.token = self.token_iter.next();
+        last_token.unwrap()
     }
     fn eat(&mut self, kind: TokenKind) -> bool {
-        if self.peek() == kind {
+        if self.peek() == Some(kind) {
             self.next();
             true
         } else {
             false
         }
     }
-    fn expect(&mut self, kind: TokenKind) -> ParseResult<'a, Token> {
-        if self.peek() == kind {
+    fn expect(&mut self, kind: TokenKind) -> ParseResult<'s, Token<'s>> {
+        if self.peek() == Some(kind) {
             Ok(self.next())
         } else {
-            Err(self.unexpected_token())
+            Err(self.unexpected_token(Expected::Token(kind)))
         }
     }
-    fn end(&self) -> bool {
-        self.index >= self.tokens.len()
-    }
-    fn unexpected_token(&self) -> ParseError<'a> {
+    fn unexpected_token(&self, expected: Expected) -> ParseError<'s> {
         ParseError {
-            token: self.tokens[self.index],
-            source: self.source,
+            token: self.token,
+            expected,
         }
     }
     fn parse_list<T>(
         &mut self,
         sep: TokenKind,
         term: TokenKind,
-        f: impl Fn(&mut Parser<'a, 'b>) -> ParseResult<'a, T>,
-    ) -> ParseResult<'a, Vec<T>> {
+        f: impl Fn(&mut Parser<'s, 't>) -> ParseResult<'s, T>,
+    ) -> ParseResult<'s, Vec<T>> {
         let mut items = vec![];
-        if self.peek() != term {
+        if self.peek() != Some(term) {
             items.push(f(self)?);
-            while self.peek() == sep {
-                self.next();
+            while self.eat(sep) {
                 items.push(f(self)?);
             }
         }
         self.expect(term)?;
         Ok(items)
     }
-    fn parse_ref_expr(&mut self) -> ParseResult<'a, RefExpr> {
+    fn parse_ref_expr(&mut self) -> ParseResult<'s, RefExpr> {
         let value = match self.peek() {
-            TokenKind::Symbol(Symbol::Asterisk) => {
+            Some(TokenKind::Symbol(Symbol::Asterisk)) => {
                 self.next();
                 let expr = self.parse_expr(Prec::Bracket)?;
                 RefExpr::Deref(expr)
             }
-            TokenKind::Symbol(Symbol::OpenBrace) => {
+            Some(TokenKind::Symbol(Symbol::OpenBrace)) => {
                 self.next();
                 let ref_expr = self.parse_ref_expr()?;
                 self.expect(TokenKind::Symbol(Symbol::CloseBrace))?;
                 ref_expr
             }
-            TokenKind::Ident => {
-                let ident = self.next().str(self.source);
+            Some(TokenKind::Ident) => {
+                let ident = self.next().str();
                 RefExpr::Ident(self.symbols.get_symbol(ident))
             }
-            _ => Err(self.unexpected_token())?,
+            _ => Err(self.unexpected_token(Expected::RefExpr))?,
         };
         self.parse_ref_expr_fields(value)
     }
-    fn parse_ref_expr_fields(&mut self, mut left: RefExpr) -> ParseResult<'a, RefExpr> {
+    fn parse_ref_expr_fields(&mut self, mut left: RefExpr) -> ParseResult<'s, RefExpr> {
         loop {
             match self.peek() {
-                TokenKind::Symbol(Symbol::Dot) => {
+                Some(TokenKind::Symbol(Symbol::Dot)) => {
                     self.next();
-                    let ident = self.expect(TokenKind::Ident)?.str(self.source);
+                    let ident = self.expect(TokenKind::Ident)?.str();
                     let name = self.symbols.get_symbol(ident);
                     left = RefExpr::Field {
                         ref_expr: Box::new(left),
@@ -139,18 +167,20 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         }
     }
-    fn parse_expr(&mut self, prec: Prec) -> ParseResult<'a, Expr> {
+    fn parse_expr(&mut self, prec: Prec) -> ParseResult<'s, Expr> {
         let mut left = match self.peek() {
-            TokenKind::Symbol(Symbol::Asterisk) => self.parse_prefix(PrefixOp::Deref, Prec::Ref)?,
-            TokenKind::Symbol(Symbol::Ampersand) => {
+            Some(TokenKind::Symbol(Symbol::Asterisk)) => {
+                self.parse_prefix(PrefixOp::Deref, Prec::Ref)?
+            }
+            Some(TokenKind::Symbol(Symbol::Ampersand)) => {
                 self.next();
                 Expr::Ref(Box::new(self.parse_ref_expr()?))
             }
-            TokenKind::Ident => {
-                let name = self.next().str(self.source);
+            Some(TokenKind::Ident) => {
+                let name = self.next().str();
                 let symbol = self.symbols.get_symbol(name);
                 match self.peek() {
-                    TokenKind::Symbol(Symbol::OpenBrace) => {
+                    Some(TokenKind::Symbol(Symbol::OpenBrace)) => {
                         self.next();
                         let args = self.parse_list(
                             TokenKind::Symbol(Symbol::Comma),
@@ -159,13 +189,13 @@ impl<'a, 'b> Parser<'a, 'b> {
                         )?;
                         Expr::FuncCall(FuncCall { name: symbol, args })
                     }
-                    TokenKind::Symbol(Symbol::OpenCurlyBrace) => {
+                    Some(TokenKind::Symbol(Symbol::OpenCurlyBrace)) => {
                         self.next();
                         let values = self.parse_list(
                             TokenKind::Symbol(Symbol::Comma),
                             TokenKind::Symbol(Symbol::CloseCurlyBrace),
                             |parser| {
-                                let name = parser.expect(TokenKind::Ident)?.str(self.source);
+                                let name = parser.expect(TokenKind::Ident)?.str();
                                 let symbol = parser.symbols.get_symbol(name);
                                 parser.expect(TokenKind::Symbol(Symbol::Colon))?;
                                 let expr = parser.parse_expr(Prec::Bracket)?;
@@ -180,47 +210,47 @@ impl<'a, 'b> Parser<'a, 'b> {
                     _ => Expr::Ident(symbol),
                 }
             }
-            TokenKind::Integer => Expr::Integer(self.next().str(self.source).parse().unwrap()),
-            TokenKind::Keyword(Keyword::True) => {
+            Some(TokenKind::Integer) => Expr::Integer(self.next().str().parse().unwrap()),
+            Some(TokenKind::Keyword(Keyword::True)) => {
                 self.next();
                 Expr::Bool(true)
             }
-            TokenKind::Keyword(Keyword::False) => {
+            Some(TokenKind::Keyword(Keyword::False)) => {
                 self.next();
                 Expr::Bool(false)
             }
-            TokenKind::Symbol(Symbol::OpenBrace) => {
+            Some(TokenKind::Symbol(Symbol::OpenBrace)) => {
                 self.next();
                 let expr = self.parse_expr(Prec::Bracket)?;
                 self.expect(TokenKind::Symbol(Symbol::CloseBrace))?;
                 self.next();
                 expr
             }
-            _ => Err(self.unexpected_token())?,
+            _ => Err(self.unexpected_token(Expected::Expr))?,
         };
         loop {
             left = match self.peek() {
-                TokenKind::Symbol(Symbol::Plus) if prec >= Prec::Sum => {
+                Some(TokenKind::Symbol(Symbol::Plus)) if prec >= Prec::Sum => {
                     self.parse_infix(left, InfixOp::Add, Prec::Sum)?
                 }
-                TokenKind::Symbol(Symbol::Minus) if prec >= Prec::Sum => {
+                Some(TokenKind::Symbol(Symbol::Minus)) if prec >= Prec::Sum => {
                     self.parse_infix(left, InfixOp::Subtract, Prec::Sum)?
                 }
-                TokenKind::Symbol(Symbol::Asterisk) if prec >= Prec::Product => {
+                Some(TokenKind::Symbol(Symbol::Asterisk)) if prec >= Prec::Product => {
                     self.parse_infix(left, InfixOp::Multiply, Prec::Product)?
                 }
-                TokenKind::Symbol(Symbol::ForwardSlash) if prec >= Prec::Product => {
+                Some(TokenKind::Symbol(Symbol::ForwardSlash)) if prec >= Prec::Product => {
                     self.parse_infix(left, InfixOp::Divide, Prec::Product)?
                 }
-                TokenKind::Symbol(Symbol::OpenAngleBrace) if prec >= Prec::Compare => {
+                Some(TokenKind::Symbol(Symbol::OpenAngleBrace)) if prec >= Prec::Compare => {
                     self.parse_infix(left, InfixOp::LessThan, Prec::Compare)?
                 }
-                TokenKind::Symbol(Symbol::CloseAngleBrace) if prec >= Prec::Compare => {
+                Some(TokenKind::Symbol(Symbol::CloseAngleBrace)) if prec >= Prec::Compare => {
                     self.parse_infix(left, InfixOp::GreaterThan, Prec::Compare)?
                 }
-                TokenKind::Symbol(Symbol::Dot) if prec >= Prec::Dot => {
+                Some(TokenKind::Symbol(Symbol::Dot)) if prec >= Prec::Dot => {
                     self.next();
-                    let name = self.expect(TokenKind::Ident)?.str(self.source);
+                    let name = self.expect(TokenKind::Ident)?.str();
                     let symbol = self.symbols.get_symbol(name);
                     Expr::Field {
                         expr: Box::new(left),
@@ -232,12 +262,12 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         Ok(left)
     }
-    fn parse_prefix(&mut self, op: PrefixOp, prec: Prec) -> ParseResult<'a, Expr> {
+    fn parse_prefix(&mut self, op: PrefixOp, prec: Prec) -> ParseResult<'s, Expr> {
         self.next();
         let expr = Box::new(self.parse_expr(prec)?);
         Ok(Expr::Prefix { op, expr })
     }
-    fn parse_infix(&mut self, left: Expr, op: InfixOp, prec: Prec) -> ParseResult<'a, Expr> {
+    fn parse_infix(&mut self, left: Expr, op: InfixOp, prec: Prec) -> ParseResult<'s, Expr> {
         self.next();
         let right = self.parse_expr(prec)?;
         Ok(Expr::Infix {
@@ -246,12 +276,11 @@ impl<'a, 'b> Parser<'a, 'b> {
             op,
         })
     }
-    fn parse_if(&mut self) -> ParseResult<'a, If> {
+    fn parse_if(&mut self) -> ParseResult<'s, If> {
         let cond = Box::new(self.parse_expr(Prec::Bracket)?);
         let if_block = self.parse_block()?;
-        let else_block = if self.peek() == TokenKind::Keyword(Keyword::Else) {
-            self.next();
-            if self.peek() == TokenKind::Keyword(Keyword::If) {
+        let else_block = if self.eat(TokenKind::Keyword(Keyword::Else)) {
+            if self.peek() == Some(TokenKind::Keyword(Keyword::If)) {
                 Else::If(Box::new(self.parse_if()?))
             } else {
                 Else::Block(self.parse_block()?)
@@ -265,30 +294,30 @@ impl<'a, 'b> Parser<'a, 'b> {
             else_block,
         })
     }
-    fn parse_stmt(&mut self) -> ParseResult<'a, Stmt> {
+    fn parse_stmt(&mut self) -> ParseResult<'s, Stmt> {
         Ok(match self.peek() {
-            TokenKind::Keyword(Keyword::If) => {
+            Some(TokenKind::Keyword(Keyword::If)) => {
                 self.next();
                 Stmt::If(self.parse_if()?)
             }
-            TokenKind::Keyword(Keyword::While) => {
+            Some(TokenKind::Keyword(Keyword::While)) => {
                 self.next();
                 let cond = self.parse_expr(Prec::Bracket)?;
                 let body = self.parse_block()?;
                 Stmt::While { cond, body }
             }
-            TokenKind::Keyword(Keyword::Var) => {
+            Some(TokenKind::Keyword(Keyword::Var)) => {
                 self.next();
-                let name = self.expect(TokenKind::Ident)?.str(self.source);
+                let name = self.expect(TokenKind::Ident)?.str();
                 let symbol = self.symbols.get_symbol(name);
 
-                let ty = if self.peek() == TokenKind::Symbol(Symbol::Colon) {
+                let ty = if self.peek() == Some(TokenKind::Symbol(Symbol::Colon)) {
                     self.next();
                     Some(self.parse_ty()?)
                 } else {
                     None
                 };
-                let expr = if self.peek() == TokenKind::Symbol(Symbol::Equals) {
+                let expr = if self.peek() == Some(TokenKind::Symbol(Symbol::Equals)) {
                     self.next();
                     Some(self.parse_expr(Prec::Bracket)?)
                 } else {
@@ -301,9 +330,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                     ty,
                 }
             }
-            TokenKind::Keyword(Keyword::Return) => {
+            Some(TokenKind::Keyword(Keyword::Return)) => {
                 self.next();
-                let expr = if self.peek() == TokenKind::Symbol(Symbol::Semicolon) {
+                let expr = if self.peek() == Some(TokenKind::Symbol(Symbol::Semicolon)) {
                     None
                 } else {
                     Some(self.parse_expr(Prec::Bracket)?)
@@ -311,10 +340,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.expect(TokenKind::Symbol(Symbol::Semicolon))?;
                 Stmt::Return(expr)
             }
-            TokenKind::Ident => {
-                let name = self.next().str(self.source);
+            Some(TokenKind::Ident) => {
+                let name = self.next().str();
                 let symbol = self.symbols.get_symbol(name);
-                let stmt = if self.peek() == TokenKind::Symbol(Symbol::OpenBrace) {
+                let stmt = if self.peek() == Some(TokenKind::Symbol(Symbol::OpenBrace)) {
                     self.next();
                     let args = self.parse_list(
                         TokenKind::Symbol(Symbol::Comma),
@@ -331,59 +360,59 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.expect(TokenKind::Symbol(Symbol::Semicolon))?;
                 stmt
             }
-            TokenKind::Symbol(Symbol::Asterisk) => {
+            Some(TokenKind::Symbol(Symbol::Asterisk)) => {
                 let ref_expr = self.parse_ref_expr()?;
                 self.expect(TokenKind::Symbol(Symbol::Equals))?;
                 let expr = self.parse_expr(Prec::Bracket)?;
                 self.expect(TokenKind::Symbol(Symbol::Semicolon))?;
                 Stmt::Assign { ref_expr, expr }
             }
-            _ => Err(self.unexpected_token())?,
+            _ => Err(self.unexpected_token(Expected::Stmt))?,
         })
     }
     fn parse_basic_ty(&mut self, ty: Ty) -> Ty {
         self.next();
         ty
     }
-    fn parse_ty(&mut self) -> ParseResult<'a, Ty> {
+    fn parse_ty(&mut self) -> ParseResult<'s, Ty> {
         Ok(match self.peek() {
-            TokenKind::Keyword(Keyword::I8) => self.parse_basic_ty(Ty::Int(Int::I8)),
-            TokenKind::Keyword(Keyword::I16) => self.parse_basic_ty(Ty::Int(Int::I16)),
-            TokenKind::Keyword(Keyword::I32) => self.parse_basic_ty(Ty::Int(Int::I32)),
+            Some(TokenKind::Keyword(Keyword::I8)) => self.parse_basic_ty(Ty::Int(Int::I8)),
+            Some(TokenKind::Keyword(Keyword::I16)) => self.parse_basic_ty(Ty::Int(Int::I16)),
+            Some(TokenKind::Keyword(Keyword::I32)) => self.parse_basic_ty(Ty::Int(Int::I32)),
 
-            TokenKind::Keyword(Keyword::U8) => self.parse_basic_ty(Ty::Int(Int::U8)),
-            TokenKind::Keyword(Keyword::U16) => self.parse_basic_ty(Ty::Int(Int::U16)),
-            TokenKind::Keyword(Keyword::U32) => self.parse_basic_ty(Ty::Int(Int::U32)),
+            Some(TokenKind::Keyword(Keyword::U8)) => self.parse_basic_ty(Ty::Int(Int::U8)),
+            Some(TokenKind::Keyword(Keyword::U16)) => self.parse_basic_ty(Ty::Int(Int::U16)),
+            Some(TokenKind::Keyword(Keyword::U32)) => self.parse_basic_ty(Ty::Int(Int::U32)),
 
-            TokenKind::Keyword(Keyword::Bool) => self.parse_basic_ty(Ty::Bool),
+            Some(TokenKind::Keyword(Keyword::Bool)) => self.parse_basic_ty(Ty::Bool),
 
-            TokenKind::Symbol(Symbol::Asterisk) => {
+            Some(TokenKind::Symbol(Symbol::Asterisk)) => {
                 self.next();
                 Ty::Ref(Box::new(self.parse_ty()?))
             }
-            TokenKind::Ident => {
-                let name = self.next().str(self.source);
+            Some(TokenKind::Ident) => {
+                let name = self.next().str();
                 Ty::Struct(self.symbols.get_symbol(name))
             }
-            _ => Err(self.unexpected_token())?,
+            _ => Err(self.unexpected_token(Expected::Type))?,
         })
     }
-    fn parse_block(&mut self) -> ParseResult<'a, Block> {
+    fn parse_block(&mut self) -> ParseResult<'s, Block> {
         self.expect(TokenKind::Symbol(Symbol::OpenCurlyBrace))?;
         let mut stmts = vec![];
-        while self.peek() != TokenKind::Symbol(Symbol::CloseCurlyBrace) {
+        while self.peek() != Some(TokenKind::Symbol(Symbol::CloseCurlyBrace)) {
             stmts.push(self.parse_stmt()?);
         }
         self.next();
         Ok(Block { stmts })
     }
-    fn parse_func(&mut self) -> ParseResult<'a, Func> {
+    fn parse_func(&mut self) -> ParseResult<'s, Func> {
         self.expect(TokenKind::Symbol(Symbol::OpenBrace))?;
         let params = self.parse_list(
             TokenKind::Symbol(Symbol::Comma),
             TokenKind::Symbol(Symbol::CloseBrace),
             |parser| {
-                let name = parser.expect(TokenKind::Ident)?.str(self.source);
+                let name = parser.expect(TokenKind::Ident)?.str();
                 let symbol = parser.symbols.get_symbol(name);
                 parser.expect(TokenKind::Symbol(Symbol::Colon))?;
                 let ty = parser.parse_ty()?;
@@ -391,16 +420,19 @@ impl<'a, 'b> Parser<'a, 'b> {
             },
         )?;
         let returns = match self.peek() {
-            TokenKind::Symbol(Symbol::OpenCurlyBrace | Symbol::Semicolon) => None,
+            Some(TokenKind::Symbol(Symbol::OpenCurlyBrace | Symbol::Semicolon)) => None,
             _ => Some(self.parse_ty()?),
         };
         let body = match self.peek() {
-            TokenKind::Symbol(Symbol::Semicolon) => {
+            Some(TokenKind::Symbol(Symbol::Semicolon)) => {
                 self.next();
                 None
             }
-            TokenKind::Symbol(Symbol::OpenCurlyBrace) => Some(self.parse_block()?),
-            _ => return Err(self.unexpected_token()),
+            Some(TokenKind::Symbol(Symbol::OpenCurlyBrace)) => Some(self.parse_block()?),
+            _ => {
+                return Err(self
+                    .unexpected_token(Expected::Token(TokenKind::Symbol(Symbol::OpenCurlyBrace))))
+            }
         };
         Ok(Func {
             body,
@@ -408,13 +440,13 @@ impl<'a, 'b> Parser<'a, 'b> {
             returns,
         })
     }
-    fn parse_struct(&mut self) -> ParseResult<'a, Struct> {
+    fn parse_struct(&mut self) -> ParseResult<'s, Struct> {
         self.expect(TokenKind::Symbol(Symbol::OpenCurlyBrace))?;
         let fields = self.parse_list(
             TokenKind::Symbol(Symbol::Comma),
             TokenKind::Symbol(Symbol::CloseCurlyBrace),
             |parser| {
-                let name = parser.expect(TokenKind::Ident)?.str(self.source);
+                let name = parser.expect(TokenKind::Ident)?.str();
                 let symbol = parser.symbols.get_symbol(name);
                 parser.expect(TokenKind::Symbol(Symbol::Colon))?;
                 let ty = parser.parse_ty()?;
@@ -423,26 +455,27 @@ impl<'a, 'b> Parser<'a, 'b> {
         )?;
         Ok(Struct { fields })
     }
-    fn parse_file(&mut self) -> ParseResult<'a, Program> {
+    fn parse_file(&mut self) -> ParseResult<'s, Program> {
         let mut file = Program {
             funcs: HashMap::new(),
             structs: HashMap::new(),
         };
-        while !self.end() {
+        loop {
             match self.peek() {
-                TokenKind::Keyword(Keyword::Func) => {
+                Some(TokenKind::Keyword(Keyword::Func)) => {
                     self.next();
-                    let name = self.expect(TokenKind::Ident)?.str(self.source);
+                    let name = self.expect(TokenKind::Ident)?.str();
                     let symbol = self.symbols.get_symbol(name);
                     file.funcs.insert(symbol, self.parse_func()?);
                 }
-                TokenKind::Keyword(Keyword::Struct) => {
+                Some(TokenKind::Keyword(Keyword::Struct)) => {
                     self.next();
-                    let name = self.expect(TokenKind::Ident)?.str(self.source);
+                    let name = self.expect(TokenKind::Ident)?.str();
                     let symbol = self.symbols.get_symbol(name);
                     file.structs.insert(symbol, self.parse_struct()?);
                 }
-                _ => Err(self.unexpected_token())?,
+                None => break,
+                _ => Err(self.unexpected_token(Expected::Decl))?,
             }
         }
         Ok(file)

@@ -3,7 +3,14 @@ use strum::EnumIter;
 use crate::lexer::{Lexer, Position};
 
 #[derive(Debug, Clone, Copy)]
-pub struct Token {
+pub struct Token<'s> {
+    pub source: &'s str,
+    pub offset: usize,
+    pub kind: TokenKind,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RawToken {
     pub offset: usize,
     pub kind: TokenKind,
 }
@@ -107,11 +114,11 @@ impl Symbol {
     }
 }
 
-impl Token {
-    pub fn pos(&self, source: &str) -> Position {
+impl<'s> Token<'s> {
+    pub fn pos(&self) -> Position {
         let mut line = 1;
         let mut column = 1;
-        for (offset, ch) in source.char_indices() {
+        for (offset, ch) in self.source.char_indices() {
             if offset == self.offset {
                 return Position { line, column };
             }
@@ -123,15 +130,15 @@ impl Token {
         }
         unreachable!()
     }
-    pub fn len<'a>(&self, source: &str) -> usize {
+    pub fn len(&self) -> usize {
         let mut lexer = Lexer {
             offset: self.offset,
-            source,
+            source: self.source,
         };
         lexer.next_token();
         lexer.offset - self.offset
     }
-    pub fn str<'a>(&self, source: &'a str) -> &'a str {
-        &source[self.offset..self.offset + self.len(source)]
+    pub fn str(&self) -> &'s str {
+        &self.source[self.offset..self.offset + self.len()]
     }
 }
