@@ -39,7 +39,7 @@ fn size_bytes(ty: &ir::Ty) -> u32 {
             Size::B32 => 4,
         },
         ir::Ty::Ptr => 8,
-        ir::Ty::Struct(fields) => {
+        ir::Ty::Struct { fields, .. } => {
             let mut size = 0;
             for field in fields {
                 size = align_to(size, align_bytes(&field.ty)) + size_bytes(&field.ty);
@@ -62,7 +62,7 @@ fn align_bytes(ty: &ir::Ty) -> u32 {
             Size::B32 => 4,
         },
         ir::Ty::Ptr => 8,
-        ir::Ty::Struct(fields) => {
+        ir::Ty::Struct { fields, .. } => {
             let mut max = 0;
             for field in fields {
                 let align = align_bytes(&field.ty);
@@ -76,12 +76,12 @@ fn align_bytes(ty: &ir::Ty) -> u32 {
 }
 
 struct TyName<'a> {
-    ty: &'a ast::Ty,
+    ty: &'a ir::Ty,
     symbols: &'a Symbols<'a>,
 }
 
 impl<'a> TyName<'a> {
-    fn new(ty: &'a ast::Ty, symbols: &'a Symbols<'a>) -> TyName<'a> {
+    fn new(ty: &'a ir::Ty, symbols: &'a Symbols<'a>) -> TyName<'a> {
         TyName { ty, symbols }
     }
 }
@@ -132,10 +132,10 @@ pub fn compile_func<'a, W: Write>(
         program,
     };
     // TODO WHY YOU NEED AST?!?!?
-    let func_ast = program
-        .func_iter()
-        .find(|func_ast| func_ast.name == func.name)
-        .unwrap();
+    // let func_ast = program
+    //     .func_iter()
+    //     .find(|func_ast| func_ast.name == func.name)
+    //     .unwrap();
     write!(compiler.output, "export function ")?;
     if let Some(ty) = &func_ast.returns {
         write!(compiler.output, "{} ", TyName::new(ty, symbols))?;
@@ -454,7 +454,7 @@ impl<'a, W: Write> Compiler<'a, W> {
             ir::Ty::Ptr => {
                 writeln!(self.output, "  storel {}, {}", value, addr)?;
             }
-            ir::Ty::Struct(fields) => {
+            ir::Ty::Struct { fields, .. } => {
                 self.copy_struct(value, addr, fields)?;
             }
         }
@@ -485,7 +485,7 @@ impl<'a, W: Write> Compiler<'a, W> {
                 writeln!(self.output, "  {} =l loadl {}", temp, addr)?;
                 Value::Temp(temp)
             }
-            ir::Ty::Struct(_) => addr,
+            ir::Ty::Struct { .. } => addr,
         })
     }
     fn new_temp(&mut self) -> Temp {

@@ -1,4 +1,4 @@
-use std::{rc::Rc, cell::RefCell, fmt};
+use std::{cell::RefCell, fmt, rc::Rc};
 
 #[derive(Debug)]
 pub struct InferTyRef<T: Unify>(Rc<RefCell<InferTy<T>>>);
@@ -15,7 +15,10 @@ impl<T: Unify> Clone for InferTyRef<T> {
     }
 }
 
-pub trait Unify where Self: Sized {
+pub trait Unify
+where
+    Self: Sized,
+{
     fn unify(a: Self, b: Self) -> Result<Self, ()>;
 }
 
@@ -33,7 +36,7 @@ impl<T: Unify> InferTyRef<T> {
 
 pub fn unify<T: Unify>(a: &InferTyRef<T>, b: &InferTyRef<T>) -> Result<InferTyRef<T>, ()> {
     if Rc::ptr_eq(&a.0, &b.0) {
-        return Ok(a.clone())
+        return Ok(a.clone());
     }
 
     let mut a_ref = a.0.borrow_mut();

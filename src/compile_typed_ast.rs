@@ -1,11 +1,23 @@
-use crate::{ir, ty, typed_ast};
+use crate::{infer::InferTyRef, ir, ty, typed_ast};
 
 fn concrete_ty(ty: &ty::TyRef) -> ir::Ty {
     ty.map(|ty| match ty {
         ty::Ty::Bool => ir::Ty::Bool,
         ty::Ty::Ref(_) => ir::Ty::Ptr,
         ty::Ty::Int(int) => ir::Ty::Int(concrete_int(int)),
-        ty::Ty::Struct(s) => ir::Ty::Struct(concrete_struct(s)),
+        ty::Ty::Struct(ty) => ty.map(|ty| match ty {
+            ty::StructTy::Known { fields, name } => ir::Ty::Struct {
+                name: *name,
+                fields: fields
+                    .iter()
+                    .map(|field| ir::StructField {
+                        name: field.name,
+                        ty: concrete_ty(&field.ty),
+                    })
+                    .collect(),
+            },
+            ty::StructTy::WithFields(_) => panic!(),
+        }),
         ty::Ty::Any => panic!(),
     })
 }
@@ -17,19 +29,6 @@ fn concrete_int(ty: &ty::IntTyRef) -> ty::Int {
             signedness: ty::Signedness::Signed,
             size: ty::Size::B32,
         },
-    })
-}
-
-fn concrete_struct(ty: &ty::StructTyRef) -> Vec<ir::StructField> {
-    ty.map(|ty| match ty {
-        ty::StructTy::Known { fields, .. } => fields
-            .iter()
-            .map(|field| ir::StructField {
-                name: field.name,
-                ty: concrete_ty(&field.ty),
-            })
-            .collect(),
-        ty::StructTy::WithFields(_) => panic!(),
     })
 }
 
@@ -81,18 +80,27 @@ fn lower_stmt(stmt: &typed_ast::Stmt) -> ir::Stmt {
     }
 }
 
+fn struct_fields(ty: &InferTyRef<ty::StructTy>) -> Vec<ir::StructField> {
+    ty.map(|ty| match ty {
+        ty::StructTy::Known { fields, .. } => fields
+            .iter()
+            .map(|field| ir::StructField {
+                name: field.name,
+                ty: concrete_ty(&field.ty),
+            })
+            .collect(),
+        ty::StructTy::WithFields(_) => panic!(),
+    })
+}
+
 fn lower_ref_expr(ref_expr: &typed_ast::RefExpr) -> ir::RefExpr {
     match ref_expr {
         typed_ast::RefExpr::Variable(var) => ir::RefExpr::Variable(*var),
-        typed_ast::RefExpr::Field { ref_expr, name, ty } => {
-            let ref_expr = Box::new(lower_ref_expr(ref_expr));
-            let fields = concrete_struct(ty);
-            ir::RefExpr::Field {
-                ref_expr,
-                fields,
-                name: *name,
-            }
-        }
+        typed_ast::RefExpr::Field { ref_expr, name, ty } => ir::RefExpr::Field {
+            ref_expr: Box::new(lower_ref_expr(ref_expr)),
+            fields: struct_fields(ty),
+            name: *name,
+        },
         typed_ast::RefExpr::Deref(expr) => {
             let expr = Box::new(lower_expr(expr));
             ir::RefExpr::Deref(expr)
@@ -135,15 +143,11 @@ fn lower_expr(expr: &typed_ast::Expr) -> ir::Expr {
                 .collect();
             ir::Expr::InitStruct(values)
         }
-        typed_ast::Expr::Field { expr, name, ty } => {
-            let expr = Box::new(lower_expr(expr));
-            let fields = concrete_struct(ty);
-            ir::Expr::Field {
-                expr,
-                fields,
-                name: *name,
-            }
-        }
+        typed_ast::Expr::Field { expr, name, ty } => ir::Expr::Field {
+            expr: Box::new(lower_expr(expr)),
+            fields: struct_fields(ty),
+            name: *name,
+        },
     }
 }
 

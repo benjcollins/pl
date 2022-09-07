@@ -5,7 +5,10 @@ pub enum Ty {
     Int(Int),
     Bool,
     Ptr,
-    Struct(Vec<StructField>),
+    Struct {
+        name: Symbol,
+        fields: Vec<StructField>,
+    },
 }
 
 #[derive(Debug, Clone)]
