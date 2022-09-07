@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::symbols::Symbol;
 
 #[derive(Debug, Clone)]
@@ -38,7 +36,7 @@ pub enum Expr {
     FuncCall(FuncCall),
     InitStruct {
         name: Symbol,
-        values: Vec<StructValue>
+        values: Vec<StructValue>,
     },
 }
 
@@ -49,7 +47,7 @@ pub enum RefExpr {
     Field {
         ref_expr: Box<RefExpr>,
         name: Symbol,
-    }
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -78,7 +76,7 @@ pub enum Stmt {
     Let {
         ident: Symbol,
         expr: Option<Expr>,
-        ty: Option<Ty>
+        ty: Option<Ty>,
     },
     Assign {
         ref_expr: RefExpr,
@@ -130,6 +128,7 @@ pub struct FuncCall {
 
 #[derive(Debug, Clone)]
 pub struct Func {
+    pub name: Symbol,
     pub params: Vec<Param>,
     pub returns: Option<Ty>,
     pub body: Option<Block>,
@@ -137,6 +136,7 @@ pub struct Func {
 
 #[derive(Debug, Clone)]
 pub struct Struct {
+    pub name: Symbol,
     pub fields: Vec<StructField>,
 }
 
@@ -147,7 +147,27 @@ pub struct StructField {
 }
 
 #[derive(Debug, Clone)]
+pub enum Decl {
+    Struct(Struct),
+    Func(Func),
+}
+
+#[derive(Debug, Clone)]
 pub struct Program {
-    pub funcs: HashMap<Symbol, Func>,
-    pub structs: HashMap<Symbol, Struct>,
+    pub decls: Vec<Decl>,
+}
+
+impl Program {
+    pub fn func_iter(&self) -> impl Iterator<Item = &Func> {
+        self.decls.iter().filter_map(|decl| match decl {
+            Decl::Func(func_decl) => Some(func_decl),
+            _ => None,
+        })
+    }
+    pub fn struct_iter(&self) -> impl Iterator<Item = &Struct> {
+        self.decls.iter().filter_map(|decl| match decl {
+            Decl::Struct(struct_decl) => Some(struct_decl),
+            _ => None,
+        })
+    }
 }

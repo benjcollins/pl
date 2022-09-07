@@ -1,30 +1,36 @@
-use std::{collections::HashMap, fmt};
+use std::fmt;
 
 use crate::{
     ast::{
-        Block, Else, Expr, Func, FuncCall, If, InfixOp, Int, Param, PrefixOp, Program, RefExpr,
-        Stmt, Struct, StructField, StructValue, Ty,
+        Block, Decl, Else, Expr, Func, FuncCall, If, InfixOp, Int, Param, PrefixOp, Program,
+        RefExpr, Stmt, Struct, StructField, StructValue, Ty,
     },
     symbols::Symbols,
     token::{Keyword, Symbol, Token, TokenKind},
     tokens::{TokenIter, Tokens},
 };
 
-pub fn parse<'s, 't>(tokens: &Tokens<'s>) -> ParseResult<'s, (Program, Symbols<'s>)> {
+pub fn parse<'s, 't>(tokens: &Tokens<'s>) -> (Program, Symbols<'s>, Vec<ParseError<'s>>) {
     let mut token_iter = tokens.iter();
     let token = token_iter.next();
     let mut parser = Parser {
         token,
         token_iter,
         symbols: Symbols::new(),
+        handled_errors: vec![],
     };
-    Ok((parser.parse_file()?, parser.symbols))
+    (
+        parser.parse_program(),
+        parser.symbols,
+        parser.handled_errors,
+    )
 }
 
 struct Parser<'s, 't> {
     token_iter: TokenIter<'t, 's>,
     token: Option<Token<'s>>,
     symbols: Symbols<'s>,
+    handled_errors: Vec<ParseError<'s>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -401,12 +407,32 @@ impl<'s, 't> Parser<'s, 't> {
         self.expect(TokenKind::Symbol(Symbol::OpenCurlyBrace))?;
         let mut stmts = vec![];
         while self.peek() != Some(TokenKind::Symbol(Symbol::CloseCurlyBrace)) {
-            stmts.push(self.parse_stmt()?);
+            match self.parse_stmt() {
+                Ok(stmt) => stmts.push(stmt),
+                Err(err) => {
+                    self.handled_errors.push(err);
+                    loop {
+                        match self.peek() {
+                            Some(TokenKind::Symbol(Symbol::Semicolon)) => {
+                                self.next();
+                                break;
+                            }
+                            Some(TokenKind::Symbol(Symbol::CloseCurlyBrace)) => break,
+                            Some(TokenKind::Keyword(Keyword::Func | Keyword::Struct)) => {
+                                return Ok(Block { stmts })
+                            }
+                            _ => _ = self.next(),
+                        }
+                    }
+                }
+            }
         }
         self.next();
         Ok(Block { stmts })
     }
     fn parse_func(&mut self) -> ParseResult<'s, Func> {
+        let name = self.expect(TokenKind::Ident)?.str();
+        let symbol = self.symbols.get_symbol(name);
         self.expect(TokenKind::Symbol(Symbol::OpenBrace))?;
         let params = self.parse_list(
             TokenKind::Symbol(Symbol::Comma),
@@ -435,12 +461,15 @@ impl<'s, 't> Parser<'s, 't> {
             }
         };
         Ok(Func {
+            name: symbol,
             body,
             params,
             returns,
         })
     }
     fn parse_struct(&mut self) -> ParseResult<'s, Struct> {
+        let name = self.expect(TokenKind::Ident)?.str();
+        let symbol = self.symbols.get_symbol(name);
         self.expect(TokenKind::Symbol(Symbol::OpenCurlyBrace))?;
         let fields = self.parse_list(
             TokenKind::Symbol(Symbol::Comma),
@@ -453,31 +482,38 @@ impl<'s, 't> Parser<'s, 't> {
                 Ok(StructField { name: symbol, ty })
             },
         )?;
-        Ok(Struct { fields })
+        Ok(Struct {
+            fields,
+            name: symbol,
+        })
     }
-    fn parse_file(&mut self) -> ParseResult<'s, Program> {
-        let mut file = Program {
-            funcs: HashMap::new(),
-            structs: HashMap::new(),
-        };
-        loop {
-            match self.peek() {
-                Some(TokenKind::Keyword(Keyword::Func)) => {
-                    self.next();
-                    let name = self.expect(TokenKind::Ident)?.str();
-                    let symbol = self.symbols.get_symbol(name);
-                    file.funcs.insert(symbol, self.parse_func()?);
-                }
-                Some(TokenKind::Keyword(Keyword::Struct)) => {
-                    self.next();
-                    let name = self.expect(TokenKind::Ident)?.str();
-                    let symbol = self.symbols.get_symbol(name);
-                    file.structs.insert(symbol, self.parse_struct()?);
-                }
-                None => break,
-                _ => Err(self.unexpected_token(Expected::Decl))?,
+    fn parse_decl(&mut self) -> ParseResult<'s, Decl> {
+        match self.peek() {
+            Some(TokenKind::Keyword(Keyword::Func)) => {
+                self.next();
+                Ok(Decl::Func(self.parse_func()?))
+            }
+            Some(TokenKind::Keyword(Keyword::Struct)) => {
+                self.next();
+                Ok(Decl::Struct(self.parse_struct()?))
+            }
+            _ => Err(self.unexpected_token(Expected::Decl))?,
+        }
+    }
+    fn parse_program(&mut self) -> Program {
+        let mut decls = vec![];
+        while self.peek().is_some() {
+            match self.parse_decl() {
+                Ok(decl) => decls.push(decl),
+                Err(err) => loop {
+                    self.handled_errors.push(err);
+                    match self.peek() {
+                        Some(TokenKind::Keyword(Keyword::Func | Keyword::Struct)) => break,
+                        _ => _ = self.next(),
+                    }
+                },
             }
         }
-        Ok(file)
+        Program { decls }
     }
 }

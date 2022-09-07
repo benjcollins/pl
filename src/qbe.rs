@@ -118,7 +118,7 @@ impl fmt::Display for Label {
     }
 }
 
-pub fn compile_fun<'a, W: Write>(
+pub fn compile_func<'a, W: Write>(
     func: &ir::Func,
     output: W,
     symbols: &'a Symbols<'a>,
@@ -131,7 +131,11 @@ pub fn compile_fun<'a, W: Write>(
         symbols,
         program,
     };
-    let func_ast = program.funcs.get(&func.name).unwrap();
+    // TODO WHY YOU NEED AST?!?!?
+    let func_ast = program
+        .func_iter()
+        .find(|func_ast| func_ast.name == func.name)
+        .unwrap();
     write!(compiler.output, "export function ")?;
     if let Some(ty) = &func_ast.returns {
         write!(compiler.output, "{} ", TyName::new(ty, symbols))?;
@@ -173,13 +177,12 @@ pub fn compile_fun<'a, W: Write>(
 }
 
 pub fn compile_struct<W: Write>(
-    name: Symbol,
-    structure: &ast::Struct,
+    struct_decl: &ast::Struct,
     mut output: W,
     symbols: &Symbols,
 ) -> io::Result<()> {
-    write!(output, "type :{} = {{ ", symbols.get_str(name))?;
-    for field in &structure.fields {
+    write!(output, "type :{} = {{ ", symbols.get_str(struct_decl.name))?;
+    for field in &struct_decl.fields {
         write!(output, "{}, ", TyName::new(&field.ty, symbols))?;
     }
     writeln!(output, "}}\n")
@@ -368,7 +371,11 @@ impl<'a, W: Write> Compiler<'a, W> {
         }
     }
     fn compile_func_call(&mut self, func_call: &ir::FuncCall) -> io::Result<Option<Temp>> {
-        let func = self.program.funcs.get(&func_call.name).unwrap();
+        let func = self
+            .program
+            .func_iter()
+            .find(|func| func.name == func_call.name)
+            .unwrap();
 
         let values: Vec<_> = func_call
             .args
