@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
     ast::{self, Struct},
@@ -355,38 +355,6 @@ impl<'a> Compiler<'a> {
                     }),
                     result,
                 )
-            }
-            ast::Expr::InitStruct { name, values } => {
-                let struct_decl = self
-                    .program
-                    .struct_iter()
-                    .find(|struct_decl| struct_decl.name == *name)
-                    .unwrap();
-                let mut done = HashSet::new();
-                let mut mir_values = vec![];
-                let mut tys = vec![];
-                for field in struct_decl.fields.iter() {
-                    if done.contains(&field.name) {
-                        panic!()
-                    }
-                    done.insert(field.name);
-                    let value = values
-                        .iter()
-                        .find(|value| value.name == field.name)
-                        .unwrap();
-                    let (expr, ty) = self.compile_expr(&value.expr);
-                    let field_ty = compile_ty(&field.ty, self.program);
-                    unify(&ty, &field_ty).unwrap();
-                    tys.push(field_ty);
-                    mir_values.push(typed_ast::StructValue { ty, expr });
-                }
-                let struct_decl = self
-                    .program
-                    .struct_iter()
-                    .find(|struct_decl| struct_decl.name == *name)
-                    .unwrap();
-                let ty = TyRef::new(compile_struct(struct_decl, self.program));
-                (typed_ast::Expr::InitStruct(mir_values), ty)
             }
             ast::Expr::Field { expr, name } => {
                 let (expr, expr_ty) = self.compile_expr(expr);

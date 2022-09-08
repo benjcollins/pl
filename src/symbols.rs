@@ -10,7 +10,10 @@ pub struct Symbol(pub u32);
 
 impl<'a> Symbols<'a> {
     pub fn new() -> Symbols<'a> {
-        Symbols { symbol_map: HashMap::new(), symbols: vec![] }
+        Symbols {
+            symbol_map: HashMap::new(),
+            symbols: vec![],
+        }
     }
     pub fn get_symbol(&mut self, ident: &'a str) -> Symbol {
         match self.symbol_map.get(ident) {

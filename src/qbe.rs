@@ -304,27 +304,27 @@ impl<'a, W: Write> Compiler<'a, W> {
                 let temp = self.compile_func_call(func_call)?.unwrap();
                 Value::Temp(temp)
             }
-            ir::Expr::InitStruct(values) => {
-                let size = values.iter().fold(0, |size, value| {
-                    align_to(size, align_bytes(&value.ty)) + size_bytes(&value.ty)
-                });
-                let align = values
-                    .iter()
-                    .map(|value| align_bytes(&value.ty))
-                    .max()
-                    .unwrap_or(0);
-                let temp = self.alloc_size(size, align)?;
-                let mut offset = 0;
-                for value in values {
-                    offset = align_to(offset, align_bytes(&value.ty));
-                    let offset_temp = self.new_temp();
-                    writeln!(self.output, "  {} =l add {}, {}", offset_temp, temp, offset)?;
-                    let expr_temp = self.compile_expr(&value.expr)?;
-                    self.store(expr_temp, &value.ty, Value::Temp(offset_temp))?;
-                    offset += size_bytes(&value.ty);
-                }
-                Value::Temp(temp)
-            }
+            // ir::Expr::InitStruct(values) => {
+            //     let size = values.iter().fold(0, |size, value| {
+            //         align_to(size, align_bytes(&value.ty)) + size_bytes(&value.ty)
+            //     });
+            //     let align = values
+            //         .iter()
+            //         .map(|value| align_bytes(&value.ty))
+            //         .max()
+            //         .unwrap_or(0);
+            //     let temp = self.alloc_size(size, align)?;
+            //     let mut offset = 0;
+            //     for value in values {
+            //         offset = align_to(offset, align_bytes(&value.ty));
+            //         let offset_temp = self.new_temp();
+            //         writeln!(self.output, "  {} =l add {}, {}", offset_temp, temp, offset)?;
+            //         let expr_temp = self.compile_expr(&value.expr)?;
+            //         self.store(expr_temp, &value.ty, Value::Temp(offset_temp))?;
+            //         offset += size_bytes(&value.ty);
+            //     }
+            //     Value::Temp(temp)
+            // }
             ir::Expr::Field { expr, fields, name } => {
                 let struct_addr = self.compile_expr(expr)?;
                 let (field_addr, field_ty) = self.field_addr(struct_addr, fields, *name)?;

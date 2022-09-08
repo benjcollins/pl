@@ -34,10 +34,6 @@ pub enum Expr {
         expr: Box<Expr>,
     },
     FuncCall(FuncCall),
-    InitStruct {
-        name: Symbol,
-        values: Vec<StructValue>,
-    },
 }
 
 #[derive(Debug, Clone)]

@@ -3,7 +3,7 @@ use std::fmt;
 use crate::{
     ast::{
         Block, Decl, Else, Expr, Func, FuncCall, If, InfixOp, Int, Param, PrefixOp, Program,
-        RefExpr, Stmt, Struct, StructField, StructValue, Ty,
+        RefExpr, Stmt, Struct, StructField, Ty,
     },
     symbols::Symbols,
     token::{Keyword, Symbol, Token, TokenKind},
@@ -194,24 +194,6 @@ impl<'s, 't> Parser<'s, 't> {
                             |parser| parser.parse_expr(Prec::Bracket),
                         )?;
                         Expr::FuncCall(FuncCall { name: symbol, args })
-                    }
-                    Some(TokenKind::Symbol(Symbol::OpenCurlyBrace)) => {
-                        self.next();
-                        let values = self.parse_list(
-                            TokenKind::Symbol(Symbol::Comma),
-                            TokenKind::Symbol(Symbol::CloseCurlyBrace),
-                            |parser| {
-                                let name = parser.expect(TokenKind::Ident)?.str();
-                                let symbol = parser.symbols.get_symbol(name);
-                                parser.expect(TokenKind::Symbol(Symbol::Colon))?;
-                                let expr = parser.parse_expr(Prec::Bracket)?;
-                                Ok(StructValue { name: symbol, expr })
-                            },
-                        )?;
-                        Expr::InitStruct {
-                            name: symbol,
-                            values,
-                        }
                     }
                     _ => Expr::Ident(symbol),
                 }

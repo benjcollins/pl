@@ -69,7 +69,6 @@ pub enum Expr {
         ty: Ty,
     },
     FuncCall(FuncCall),
-    InitStruct(Vec<StructValue>),
     Field {
         expr: Box<Expr>,
         fields: Vec<StructField>,

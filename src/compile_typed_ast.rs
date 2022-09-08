@@ -125,16 +125,6 @@ fn lower_expr(expr: &typed_ast::Expr) -> ir::Expr {
             ty: concrete_ty(ty),
         },
         typed_ast::Expr::FuncCall(func_call) => ir::Expr::FuncCall(lower_func_call(func_call)),
-        typed_ast::Expr::InitStruct(values) => {
-            let values = values
-                .iter()
-                .map(|value| ir::StructValue {
-                    expr: lower_expr(&value.expr),
-                    ty: concrete_ty(&value.ty),
-                })
-                .collect();
-            ir::Expr::InitStruct(values)
-        }
         typed_ast::Expr::Field { expr, name, ty } => {
             let expr = Box::new(lower_expr(expr));
             let fields = concrete_struct(ty);
