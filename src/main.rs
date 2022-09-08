@@ -8,6 +8,7 @@ mod ir;
 mod lexer;
 mod parser;
 mod qbe;
+mod region;
 mod symbols;
 mod token;
 mod tokens;
